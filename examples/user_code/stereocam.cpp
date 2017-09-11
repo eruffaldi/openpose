@@ -50,12 +50,32 @@ DEFINE_double(alpha_pose,               0.6,            "Blending factor (range 
 
 op::CvMatToOpInput *cvMatToOpInput;
 op::CvMatToOpOutput *cvMatToOpOutput;
-op::PoseExtractorCaffe *poseExtractorCaffe;
-op::PoseRenderer *poseRenderer;
-op::OpOutputToCvMat *opOutputToCvMat;
-op::FrameDisplayer *frameDisplayer;
+op::PoseExtractorCaffe *poseExtractorCaffeL;
+op::PoseRenderer *poseRendererL;
+op::OpOutputToCvMat *opOutputToCvMatL;
+op::OpOutputToCvMat *opOutputToCvMatR;
 
 bool keep_on = true;
+bool inited = false;
+
+
+void splitVertically(const cv::Mat & input, cv::Mat & outputleft, cv::Mat & outputright)
+{
+
+  int rowoffset = input.rows;
+  int coloffset = input.cols / 2;
+
+  int r = 0;
+  int c = 0;
+
+  outputleft = input(cv::Range(r, std::min(r + rowoffset, input.rows)), cv::Range(c, std::min(c + coloffset, input.cols)));
+
+  c += coloffset;
+
+  outputright = input(cv::Range(r, std::min(r + rowoffset, input.rows)), cv::Range(c, std::min(c + coloffset, input.cols)));
+    
+}
+
 
 /* This callback function runs once per frame. Use it to perform any
  * quick processing you need, or have it put the frame into your application's
@@ -79,20 +99,13 @@ void cb(uvc_frame_t *frame, void *ptr) {
     return;
   }
 
-  /* Call a user function:
-   *
-   * my_type *my_obj = (*my_type) ptr;
-   * my_user_function(ptr, bgr);
-   * my_other_function(ptr, bgr->data, bgr->width, bgr->height);
-   */
-
-  /* Call a C++ method:
-   *
-   * my_type *my_obj = (*my_type) ptr;
-   * my_obj->my_func(bgr);
-   */
-
-  /* Use opencv.highgui to display the image: */
+  // Step 4 - Initialize resources on desired thread (in this case single thread, i.e. we init resources here)
+  if (inited == false)
+  {
+    poseExtractorCaffeL->initializationOnThread();
+    poseRendererL->initializationOnThread();
+    inited = true;
+  }
    
   IplImage* cvImg = cvCreateImageHeader(
         cvSize(bgr->width, bgr->height),
@@ -102,27 +115,49 @@ void cb(uvc_frame_t *frame, void *ptr) {
   cvSetData(cvImg, bgr->data, bgr->width * 3); 
 
   cv::Mat image = cv::cvarrToMat(cvImg);
+  cv::Mat imageleft;
+  cv::Mat imageright;
 
+  //Split image  vertically into 2 even parts
+  splitVertically(image, imageleft, imageright);
+
+  
   // Step 2 - Format input image to OpenPose input and output formats
-  op::Array<float> netInputArray;
-  std::vector<float> scaleRatios;
-  std::tie(netInputArray, scaleRatios) = cvMatToOpInput->format(image);
+  op::Array<float> netInputArrayL;
+  op::Array<float> netInputArrayR;
+  op::Array<float> outputArrayL;
+  op::Array<float> outputArrayR;
+  std::vector<float> scaleRatiosL;
+  std::vector<float> scaleRatiosR;
+  double scaleInputToOutputL;
+  double scaleInputToOutputR;
+
+  std::tie(netInputArrayL, scaleRatiosL) = cvMatToOpInput->format(imageleft);
+  std::tie(scaleInputToOutputL, outputArrayL) = cvMatToOpOutput->format(imageleft);
+  std::tie(netInputArrayR, scaleRatiosR) = cvMatToOpInput->format(imageright);
+  std::tie(scaleInputToOutputR, outputArrayR) = cvMatToOpOutput->format(imageright);
 
   // Step 3 - Estimate poseKeypoints
-  poseExtractorCaffe->forwardPass(netInputArray, {image.cols, image.rows}, scaleRatios);
-  const auto poseKeypoints = poseExtractorCaffe->getPoseKeypoints();
+  poseExtractorCaffeL->forwardPass(netInputArrayL, {imageleft.cols, imageleft.rows}, scaleRatiosL);
+  const auto poseKeypointsL = poseExtractorCaffeL->getPoseKeypoints();
+  poseExtractorCaffeL->forwardPass(netInputArrayR, {imageright.cols, imageright.rows}, scaleRatiosR);
+  const auto poseKeypointsR = poseExtractorCaffeL->getPoseKeypoints();
 
   // Step 4 - Render poseKeypoints
-  op::Array<float> outputArray;
-  poseRenderer->renderPose(outputArray, poseKeypoints);
-
+  poseRendererL->renderPose(outputArrayL, poseKeypointsL);
+  poseRendererL->renderPose(outputArrayR, poseKeypointsR);    
+  
   // Step 5 - OpenPose output format to cv::Mat
-  auto outputImage = opOutputToCvMat->formatToCvMat(outputArray);
+  auto outputImageL = opOutputToCvMatL->formatToCvMat(outputArrayL);
+  auto outputImageR = opOutputToCvMatL->formatToCvMat(outputArrayR);
 
   // ------------------------- SHOWING RESULT -------------------------
   
-  cv::namedWindow("Test", CV_WINDOW_AUTOSIZE);
-  cv::imshow("Test", outputImage);
+  cv::namedWindow("Test L", CV_WINDOW_AUTOSIZE);
+  cv::imshow("Test L", outputImageL);
+
+  cv::namedWindow("Test R", CV_WINDOW_AUTOSIZE);
+  cv::imshow("Test R", outputImageR);
 
   int k = cvWaitKey(10);
   if (k == 27)
@@ -188,7 +223,7 @@ int main(int argc, char **argv) {
       // outputSize
       const auto outputSize = op::flagsToPoint(FLAGS_resolution, "2560x720");
       // netInputSize
-      const auto netInputSize = op::flagsToPoint(FLAGS_net_resolution, "656x368");
+      const auto netInputSize = op::flagsToPoint(FLAGS_net_resolution, "2560x720");
       // netOutputSize
       const auto netOutputSize = netInputSize;
       // poseModel
@@ -197,17 +232,12 @@ int main(int argc, char **argv) {
       // Step 3 - Initialize all required classes
       cvMatToOpInput = new op::CvMatToOpInput{netInputSize, FLAGS_scale_number, (float)FLAGS_scale_gap};
       cvMatToOpOutput = new op::CvMatToOpOutput{outputSize};
-      poseExtractorCaffe = new op::PoseExtractorCaffe{netInputSize, netOutputSize, outputSize, FLAGS_scale_number, poseModel,
+      poseExtractorCaffeL = new op::PoseExtractorCaffe{netInputSize, netOutputSize, outputSize, FLAGS_scale_number, poseModel,
                                                     FLAGS_model_folder, FLAGS_num_gpu_start};
-      poseRenderer = new op::PoseRenderer{netOutputSize, outputSize, poseModel, nullptr, (float)FLAGS_render_threshold,
+      poseRendererL = new op::PoseRenderer{netOutputSize, outputSize, poseModel, nullptr, (float)FLAGS_render_threshold,
                                         !FLAGS_disable_blending, (float)FLAGS_alpha_pose};
-      opOutputToCvMat = new op::OpOutputToCvMat{outputSize};
-      const op::Point<int> windowedSize = outputSize;
-      frameDisplayer = new op::FrameDisplayer{windowedSize, "OpenPose with stereo cam"};
-
-      // Step 4 - Initialize resources on desired thread (in this case single thread, i.e. we init resources here)
-      poseExtractorCaffe->initializationOnThread();
-      poseRenderer->initializationOnThread();
+      opOutputToCvMatL = new op::OpOutputToCvMat{outputSize};
+      opOutputToCvMatR = new op::OpOutputToCvMat{outputSize};
 
 
       /* Print out the result */
