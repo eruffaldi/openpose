@@ -6,6 +6,9 @@
 #include <fstream>
 #include <iostream>
 #include <string>
+#include <algorithm>
+#include <iterator>
+#include <sstream>
 #include <openpose/core/headers.hpp>
 #include <openpose/filestream/headers.hpp>
 #include <openpose/gui/headers.hpp>
@@ -64,8 +67,9 @@ bool keep_on = true;
 bool inited = false;
 
 cv::VideoWriter outputVideo; 
-std::ofstream outputfileL;
-std::ofstream outputfileR;   
+std::ofstream outputfile;   
+
+int cur_frame = 0;
 
 
 void splitVertically(const cv::Mat & input, cv::Mat & outputleft, cv::Mat & outputright)
@@ -85,10 +89,49 @@ void splitVertically(const cv::Mat & input, cv::Mat & outputleft, cv::Mat & outp
     
 }
 
-void CSVFormat(std::string & kpl_str)
+/* Format string in CSV format 
+ *
+ */
+std::vector<std::string> CSVTokenize(std::string & kpl_str)
 {
   kpl_str.erase(0, kpl_str.find("\n") + 1);
   std::replace(kpl_str.begin(), kpl_str.end(), '\n', ' ');
+
+  std::vector<std::string> vec;
+  std::istringstream iss(kpl_str);
+  copy(std::istream_iterator<std::string>(iss),std::istream_iterator<std::string>(),back_inserter(vec));
+
+  return vec;
+}
+
+void emitCSV(std::ofstream & outputfile, std::string & kp_str, const op::Array<float> & poseKeypoints, int camera)
+{ 
+   std::vector<std::string> tokens = CSVTokenize(kp_str);
+
+   std::cout << "numper of strings " << tokens.size() << std::endl;
+
+   //if no person detected, output 54 zeros
+   if (tokens.size() == 0)
+   {
+     outputfile << camera << " " << cur_frame << " " << 0 << " ";
+     for (int j = 0; j < 54; j++)
+     {
+       outputfile << 0.000 << " ";
+     }
+
+     outputfile << '\n';
+   }
+
+  for (int i = 0; i < poseKeypoints.getVolume(); i += 54)
+   {
+     outputfile << camera << " " << cur_frame << " " << i/54 << " ";
+     for (int j = 0; j < 54; j++)
+     {
+       outputfile << tokens[i+j] << " ";
+     }
+
+     outputfile << '\n';
+   }  
 }
 
 
@@ -126,6 +169,8 @@ void cb(uvc_frame_t *frame, void *ptr) {
         cvSize(bgr->width, bgr->height),
        IPL_DEPTH_8U,
        3);
+
+  cur_frame ++;
      
   cvSetData(cvImg, bgr->data, bgr->width * 3); 
 
@@ -155,19 +200,14 @@ void cb(uvc_frame_t *frame, void *ptr) {
   // Step 3 - Estimate poseKeypoints
   poseExtractorCaffeL->forwardPass(netInputArrayL, {imageleft.cols, imageleft.rows}, scaleRatiosL);
   const auto poseKeypointsL = poseExtractorCaffeL->getPoseKeypoints();
-
-  std::cout << "pose keypoints left: " << poseKeypointsL.toString() << std::endl;
-
   std::string kpl_str = poseKeypointsL.toString();
-  CSVFormat(kpl_str);
-  outputfileL << kpl_str << "\n";
 
   poseExtractorCaffeL->forwardPass(netInputArrayR, {imageright.cols, imageright.rows}, scaleRatiosR);
   const auto poseKeypointsR = poseExtractorCaffeL->getPoseKeypoints();
-
   std::string kpr_str = poseKeypointsR.toString();
-  CSVFormat(kpr_str);
-  outputfileR << kpr_str << "\n";
+
+  emitCSV(outputfile, kpl_str, poseKeypointsL, 0);
+  emitCSV(outputfile, kpr_str, poseKeypointsR, 1);
 
   // Step 4 - Render poseKeypoints
   poseRendererL->renderPose(outputArrayL, poseKeypointsL);
@@ -191,12 +231,11 @@ void cb(uvc_frame_t *frame, void *ptr) {
   if (k == 27)
   {
       keep_on = false;
-      outputfileR.close();
-      outputfileL.close();
+      outputfile.close();
   }
 
 
-  outputVideo << sidebyside_in;
+  //outputVideo << sidebyside_in;
    
   cvReleaseImageHeader(&cvImg);
    
@@ -204,6 +243,10 @@ void cb(uvc_frame_t *frame, void *ptr) {
 }
 
 int main(int argc, char **argv) {
+
+  // Parsing command line flags
+  gflags::ParseCommandLineFlags(&argc, &argv, true);
+
   uvc_context_t *ctx;
   uvc_device_t *dev;
   uvc_device_handle_t *devh;
@@ -273,7 +316,7 @@ int main(int argc, char **argv) {
       opOutputToCvMatR = new op::OpOutputToCvMat{outputSize};
 
       cv::Size S = cv::Size(2560, 720);
-      outputVideo.open("../sideByside.avi", CV_FOURCC('D','I','V','X'), 5, S, true);
+      outputVideo.open("../sideByside.avi", CV_FOURCC('D','I','V','X'), 7, S, true);
       if (!outputVideo.isOpened())
         {
             std::cout  << "Could not open the output video for write: " << std::endl;
@@ -281,8 +324,7 @@ int main(int argc, char **argv) {
         }
 
 
-      outputfileL.open("../keypoints_left.txt");
-      outputfileR.open("../keypoints_right.txt");
+      outputfile.open("../keypoints.txt");
 
 
       /* Print out the result */
