@@ -3,6 +3,9 @@
 #include <opencv2/highgui/highgui.hpp>
 #include <opencv2/core/core.hpp>
 #include <unistd.h>
+#include <fstream>
+#include <iostream>
+#include <string>
 #include <openpose/core/headers.hpp>
 #include <openpose/filestream/headers.hpp>
 #include <openpose/gui/headers.hpp>
@@ -60,6 +63,10 @@ op::OpOutputToCvMat *opOutputToCvMatR;
 bool keep_on = true;
 bool inited = false;
 
+cv::VideoWriter outputVideo; 
+std::ofstream outputfileL;
+std::ofstream outputfileR;   
+
 
 void splitVertically(const cv::Mat & input, cv::Mat & outputleft, cv::Mat & outputright)
 {
@@ -76,6 +83,12 @@ void splitVertically(const cv::Mat & input, cv::Mat & outputleft, cv::Mat & outp
 
   outputright = input(cv::Range(r, std::min(r + rowoffset, input.rows)), cv::Range(c, std::min(c + coloffset, input.cols)));
     
+}
+
+void CSVFormat(std::string & kpl_str)
+{
+  kpl_str.erase(0, kpl_str.find("\n") + 1);
+  std::replace(kpl_str.begin(), kpl_str.end(), '\n', ' ');
 }
 
 
@@ -142,8 +155,19 @@ void cb(uvc_frame_t *frame, void *ptr) {
   // Step 3 - Estimate poseKeypoints
   poseExtractorCaffeL->forwardPass(netInputArrayL, {imageleft.cols, imageleft.rows}, scaleRatiosL);
   const auto poseKeypointsL = poseExtractorCaffeL->getPoseKeypoints();
+
+  std::cout << "pose keypoints left: " << poseKeypointsL.toString() << std::endl;
+
+  std::string kpl_str = poseKeypointsL.toString();
+  CSVFormat(kpl_str);
+  outputfileL << kpl_str << "\n";
+
   poseExtractorCaffeL->forwardPass(netInputArrayR, {imageright.cols, imageright.rows}, scaleRatiosR);
   const auto poseKeypointsR = poseExtractorCaffeL->getPoseKeypoints();
+
+  std::string kpr_str = poseKeypointsR.toString();
+  CSVFormat(kpr_str);
+  outputfileR << kpr_str << "\n";
 
   // Step 4 - Render poseKeypoints
   poseRendererL->renderPose(outputArrayL, poseKeypointsL);
@@ -155,17 +179,24 @@ void cb(uvc_frame_t *frame, void *ptr) {
 
   // ------------------------- SHOWING RESULT -------------------------
   
-  cv::namedWindow("Test L", CV_WINDOW_AUTOSIZE);
-  cv::imshow("Test L", outputImageL);
+  //TODO: make a video with 2 frame side by side
+  cv::Mat sidebyside_in, sidebyside_out;
+  cv::hconcat(imageleft, imageright, sidebyside_in);
+  cv::hconcat(outputImageL, outputImageR, sidebyside_out);
 
-  cv::namedWindow("Test R", CV_WINDOW_AUTOSIZE);
-  cv::imshow("Test R", outputImageR);
+  cv::namedWindow("Side By Side", CV_WINDOW_AUTOSIZE);
+  cv::imshow("Side By Side", sidebyside_out);
 
-  int k = cvWaitKey(10);
+  int k = cvWaitKey(2);
   if (k == 27)
   {
       keep_on = false;
+      outputfileR.close();
+      outputfileL.close();
   }
+
+
+  outputVideo << sidebyside_in;
    
   cvReleaseImageHeader(&cvImg);
    
@@ -240,6 +271,18 @@ int main(int argc, char **argv) {
                                         !FLAGS_disable_blending, (float)FLAGS_alpha_pose};
       opOutputToCvMatL = new op::OpOutputToCvMat{outputSize};
       opOutputToCvMatR = new op::OpOutputToCvMat{outputSize};
+
+      cv::Size S = cv::Size(2560, 720);
+      outputVideo.open("../sideByside.avi", CV_FOURCC('D','I','V','X'), 5, S, true);
+      if (!outputVideo.isOpened())
+        {
+            std::cout  << "Could not open the output video for write: " << std::endl;
+            return -1;
+        }
+
+
+      outputfileL.open("../keypoints_left.txt");
+      outputfileR.open("../keypoints_right.txt");
 
 
       /* Print out the result */
