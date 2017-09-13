@@ -37,8 +37,8 @@ struct StereoPoseExtractor {
 
 	void visualize(bool * keep_on);
 
-	std::vector<cv::Point3f> trinagulate();
-	std::vector<cv::Point3f> trinagulate(const std::string &);
+	std::vector<cv::Point3f> triangulate();
+	std::vector<cv::Point3f> triangulate(const std::string &);
 
 	op::CvMatToOpInput *cvMatToOpInput_;
 	op::CvMatToOpOutput *cvMatToOpOutput_;

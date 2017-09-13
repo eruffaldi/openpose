@@ -226,12 +226,15 @@ void StereoPoseExtractor::process(const cv::Mat & image)
   }
 }
 
-std::vector<cv::Point3f> trinagulate()
+std::vector<cv::Point3f> StereoPoseExtractor::triangulate()
 {
- 
+  //TODO: cv::Mat pnts3D(1,N, CV_64FC4)
+  //      cv::Mat cam0pnts(1,N,CV_64FC2)
+  //      cv::Mat cam1pnts(1,N,CV_64FC2)
+  //      cv::trinagulatePoints(cam0,cam1,cam0pnts,cam1pnts,pnts3D)
 }
 
-std::vector<cv::Point3f> trinagulate(const std::string & filepath)
+std::vector<cv::Point3f> StereoPoseExtractor::triangulate(const std::string & filepath)
 {
   std::string keypointpath = FLAGS_keypoint_file;
 }
