@@ -226,8 +226,40 @@ void StereoPoseExtractor::process(const cv::Mat & image)
   }
 }
 
+void fill2DMatrix(const op::Array<float> & keypoints, cv::Mat & campnts)
+{
+
+  float x = 0.0;
+  float y = 0.0;
+
+  //Ugliest AND SLOWEST
+  std::vector<std::string> spoints = CSVTokenize(keypoints_.toString());
+
+  for (int i = 0; i < 18; i += 3)
+  {
+    x = atof(spoints[i]);
+    y = atof(spoints[i+1]);
+    cv::Vec2f vec2D(x,y);
+    campnts.at<cv::Vec2f>(0,i) = vec2D;
+  }
+}
+
 std::vector<cv::Point3f> StereoPoseExtractor::triangulate()
 {
+
+  //I can take all the points negleting if they belong to a specific person 
+  //how can I know if the points belong to the same person? 
+  // Just for the beginning, take the first 54 points
+  int N = 18;
+  cv::Mat cam0pnts(1,N,CV_64FC2);
+  cv::Mat cam1pnts(1,N,CV_64FC2);
+
+  fill2DMatrix(poseKeypointsL_, cam0pnts);
+  fill2DMatrix(poseKeypointsR_, cam1pnts);
+
+  //TODO: parse camera parameters cam0 and cam1 
+  //cam0 = A*RT A:intrinsic parameter and RT rototranslation (3x4) 3x3 * 3x4 = 3x4
+
   //TODO: cv::Mat pnts3D(1,N, CV_64FC4)
   //      cv::Mat cam0pnts(1,N,CV_64FC2)
   //      cv::Mat cam1pnts(1,N,CV_64FC2)
