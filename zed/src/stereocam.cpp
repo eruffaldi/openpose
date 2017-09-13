@@ -10,6 +10,7 @@
 #include <algorithm>
 #include <iterator>
 #include <sstream>
+#include <stdlib.h> 
 #include <openpose/core/headers.hpp>
 #include <openpose/filestream/headers.hpp>
 #include <openpose/gui/headers.hpp>
@@ -23,7 +24,13 @@
 
 
 DEFINE_string(video,                    "",             "Use a video instead of the camera");
+
 DEFINE_bool(visualize,                  false,          "Visualize keypoints");
+
+DEFINE_string(resolution,               "1280x720",     "The image resolution (display and output). Use \"-1x-1\" to force the program to use the"
+                                                        " default images resolution.");
+
+DEFINE_int32(fps,                       60,              "Camera capture speed. Frame per second");                  
 
 bool keep_on = true;
 StereoPoseExtractor * stereoextractor;
@@ -74,6 +81,17 @@ void cb(uvc_frame_t *frame, void *ptr) {
   uvc_free_frame(bgr);
 }
 
+int getHeight(const std::string & resolution)
+{
+  std::string height = resolution.substr(resolution.find("x") + 1);
+  return atoi(height.c_str());
+}
+
+int getWidth(const std::string & resolution)
+{
+  std::string width = resolution.substr(0,resolution.find("x"));
+  return atoi(width.c_str());
+}
 
 
 int main(int argc, char **argv) {
@@ -81,12 +99,10 @@ int main(int argc, char **argv) {
   // Parsing command line flags
   gflags::ParseCommandLineFlags(&argc, &argv, true);
 
-  stereoextractor = new StereoPoseExtractor(argc, argv);
+  stereoextractor = new StereoPoseExtractor(argc, argv, FLAGS_resolution);
 
   if( FLAGS_video == "" )
   {
-
-    std::cout << "reading from webcam " << std::endl;
 
     uvc_context_t *ctx;
     uvc_device_t *dev;
@@ -133,7 +149,7 @@ int main(int argc, char **argv) {
             devh, &ctrl, /* result stored in ctrl */
             UVC_FRAME_FORMAT_YUYV, /* YUV 422, aka YUV 4:2:2. try _COMPRESSED */
             //1344, 376, 100
-            2560, 720, 60 /* width, height, fps */
+            getWidth(FLAGS_resolution) * 2, getHeight(FLAGS_resolution), FLAGS_fps /* width, height, fps */
         );
 
         /* Print out the result */

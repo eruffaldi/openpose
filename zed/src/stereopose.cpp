@@ -18,8 +18,7 @@ DEFINE_string(net_resolution,           "656x368",      "Multiples of 16. If it 
                                                         " the speed increases. For maximum speed-accuracy balance, it should keep the closest aspect"
                                                         " ratio possible to the images or videos to be processed. E.g. the default `656x368` is"
                                                         " optimal for 16:9 videos, e.g. full HD (1980x1080) and HD (1280x720) videos.");
-DEFINE_string(resolution,               "1280x720",     "The image resolution (display and output). Use \"-1x-1\" to force the program to use the"
-                                                        " default images resolution.");
+
 DEFINE_int32(num_gpu_start,             0,              "GPU device start number.");
 DEFINE_double(scale_gap,                0.3,            "Scale gap between scales. No effect unless scale_number > 1. Initial scale is always 1."
                                                         " If you want to change the initial scale, you actually want to multiply the"
@@ -37,6 +36,8 @@ DEFINE_double(alpha_pose,               0.6,            "Blending factor (range 
 DEFINE_string(write_video,              "",             "Full file path to write rendered frames in motion JPEG video format.");
 
 DEFINE_string(write_keypoint,           "",             "Full file path to write people body pose keypoints data. Only CSV format supported");  
+
+DEFINE_string(keypoint_file,            "",             "Full file path to read keypoint file. Used to get 3D keypoints from file instead of video");
 
 
 void splitVertically(const cv::Mat & input, cv::Mat & outputleft, cv::Mat & outputright)
@@ -101,7 +102,7 @@ void emitCSV(std::ofstream & outputfile, std::string & kp_str, const op::Array<f
    }  
 }
 
-StereoPoseExtractor::StereoPoseExtractor(int argc, char **argv)
+StereoPoseExtractor::StereoPoseExtractor(int argc, char **argv, const std::string resolution) : resolution_(resolution)
 {  
 
   gflags::ParseCommandLineFlags(&argc, &argv, true);
@@ -134,9 +135,9 @@ StereoPoseExtractor::StereoPoseExtractor(int argc, char **argv)
 
   // Step 2 - Read Google flags (user defined configuration)
   // outputSize
-  const auto outputSize = op::flagsToPoint(FLAGS_resolution, "2560x720");
+  const auto outputSize = op::flagsToPoint(resolution_, "1280x720");
   // netInputSize
-  const auto netInputSize = op::flagsToPoint(FLAGS_net_resolution, "2560x720");
+  const auto netInputSize = op::flagsToPoint(FLAGS_net_resolution, "1280x720");
   // netOutputSize
   const auto netOutputSize = netInputSize;
   // poseModel
@@ -178,8 +179,6 @@ void StereoPoseExtractor::process(const cv::Mat & image)
 
   op::Array<float> netInputArrayL;
   op::Array<float> netInputArrayR;
-  op::Array<float> poseKeypointsL;
-  op::Array<float> poseKeypointsR;
 
   op::Array<float> outputArrayL;
   op::Array<float> outputArrayR;
@@ -197,17 +196,17 @@ void StereoPoseExtractor::process(const cv::Mat & image)
 
   // Step 3 - Estimate poseKeypoints
   poseExtractorCaffeL_->forwardPass(netInputArrayL, {imageleft_.cols, imageleft_.rows}, scaleRatiosL);
-  poseKeypointsL = poseExtractorCaffeL_->getPoseKeypoints();
+  poseKeypointsL_ = poseExtractorCaffeL_->getPoseKeypoints();
 
   poseExtractorCaffeL_->forwardPass(netInputArrayR, {imageright_.cols, imageright_.rows}, scaleRatiosR);
-  poseKeypointsR = poseExtractorCaffeL_->getPoseKeypoints();
+  poseKeypointsR_ = poseExtractorCaffeL_->getPoseKeypoints();
 
-  std::string kpl_str = poseKeypointsL.toString();
-  std::string kpr_str = poseKeypointsR.toString();
+  std::string kpl_str = poseKeypointsL_.toString();
+  std::string kpr_str = poseKeypointsR_.toString();
 
   // Step 4 - Render poseKeypoints
-  poseRendererL_->renderPose(outputArrayL, poseKeypointsL);
-  poseRendererL_->renderPose(outputArrayR, poseKeypointsR);    
+  poseRendererL_->renderPose(outputArrayL, poseKeypointsL_);
+  poseRendererL_->renderPose(outputArrayR, poseKeypointsR_);    
   
   // Step 5 - OpenPose output format to cv::Mat
   outputImageL_ = opOutputToCvMatL_->formatToCvMat(outputArrayL);
@@ -222,9 +221,19 @@ void StereoPoseExtractor::process(const cv::Mat & image)
 
   if( FLAGS_write_keypoint != "")
   {
-    emitCSV(outputfile_, kpl_str, poseKeypointsL, 0, cur_frame_);
-    emitCSV(outputfile_, kpr_str, poseKeypointsR, 1, cur_frame_);
+    emitCSV(outputfile_, kpl_str, poseKeypointsL_, 0, cur_frame_);
+    emitCSV(outputfile_, kpr_str, poseKeypointsR_, 1, cur_frame_);
   }
+}
+
+std::vector<cv::Point3f> trinagulate()
+{
+ 
+}
+
+std::vector<cv::Point3f> trinagulate(const std::string & filepath)
+{
+  std::string keypointpath = FLAGS_keypoint_file;
 }
 
 void StereoPoseExtractor::visualize(bool * keep_on)

@@ -27,7 +27,7 @@ void emitCSV(std::ofstream & outputfile, std::string & kp_str, const op::Array<f
 
 struct StereoPoseExtractor {
 
-	StereoPoseExtractor(int argc, char **argv);
+	StereoPoseExtractor(int argc, char **argv, const std::string resolution);
 
 	void init();
 
@@ -37,6 +37,8 @@ struct StereoPoseExtractor {
 
 	void visualize(bool * keep_on);
 
+	std::vector<cv::Point3f> trinagulate();
+	std::vector<cv::Point3f> trinagulate(const std::string &);
 
 	op::CvMatToOpInput *cvMatToOpInput_;
 	op::CvMatToOpOutput *cvMatToOpOutput_;
@@ -44,6 +46,9 @@ struct StereoPoseExtractor {
 	op::PoseRenderer *poseRendererL_;
 	op::OpOutputToCvMat *opOutputToCvMatL_;
 	op::OpOutputToCvMat *opOutputToCvMatR_;
+
+	op::Array<float> poseKeypointsL_;
+	op::Array<float> poseKeypointsR_;
 
 	bool inited_;
 
@@ -56,5 +61,7 @@ struct StereoPoseExtractor {
 	cv::Mat imageright_;
 	cv::Mat outputImageR_;
 	cv::Mat outputImageL_;
+
+	std::string resolution_;
 
 };
