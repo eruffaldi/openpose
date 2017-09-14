@@ -3,6 +3,9 @@
 #include <stdio.h>
 #include <opencv2/highgui/highgui.hpp>
 #include <opencv2/core/core.hpp>
+#include <opencv2/imgproc/imgproc.hpp>
+#include <opencv2/opencv.hpp>
+#include <opencv2/calib3d/calib3d.hpp>
 #include <unistd.h>
 #include <fstream>
 #include <iostream>
@@ -15,13 +18,14 @@
 #include <openpose/gui/headers.hpp>
 #include <openpose/pose/headers.hpp>
 #include <openpose/utilities/headers.hpp>
+#include "utilities.hpp"
 #include <gflags/gflags.h> // DEFINE_bool, DEFINE_int32, DEFINE_int64, DEFINE_uint64, DEFINE_double, DEFINE_string
 #include <glog/logging.h> // google::InitGoogleLogging
 
 
 
 void splitVertically(const cv::Mat & input, cv::Mat & outputleft, cv::Mat & outputright);
-std::vector<std::string> CSVTokenize(std::string & kpl_str);
+std::vector<std::string> CSVTokenize(std::string kpl_str);
 void emitCSV(std::ofstream & outputfile, std::string & kp_str, const op::Array<float> & poseKeypoints, int camera);
 
 
@@ -36,6 +40,9 @@ struct StereoPoseExtractor {
 	void process(const cv::Mat & image);
 
 	void visualize(bool * keep_on);
+
+	void parseIntrinsicMatrix(const std::string path = "../settings/SN1499.conf");
+
 
 	std::vector<cv::Point3f> triangulate();
 	std::vector<cv::Point3f> triangulate(const std::string &);
@@ -63,5 +70,18 @@ struct StereoPoseExtractor {
 	cv::Mat outputImageL_;
 
 	std::string resolution_;
+	std::string resolution_code_;
+
+	cv::Mat intrinsics_left_;
+	cv::Mat intrinsics_right_;
+	cv::Mat RT_left_;
+	cv::Mat RT_right_;
+	cv::Mat dist_left_;
+	cv::Mat dist_right_;
+
+	/*Rotation matrix between the coordinate systems of the first and second cameras*/
+	cv::Mat SR_;
+	/*Translation vector between coordinate systems of cameras*/
+	cv::Vec3d ST_;
 
 };

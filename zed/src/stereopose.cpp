@@ -60,7 +60,7 @@ void splitVertically(const cv::Mat & input, cv::Mat & outputleft, cv::Mat & outp
 /* Format string in CSV format 
  *
  */
-std::vector<std::string> CSVTokenize(std::string & kpl_str)
+std::vector<std::string> CSVTokenize(std::string kpl_str)
 {
   kpl_str.erase(0, kpl_str.find("\n") + 1);
   std::replace(kpl_str.begin(), kpl_str.end(), '\n', ' ');
@@ -76,7 +76,7 @@ void emitCSV(std::ofstream & outputfile, std::string & kp_str, const op::Array<f
 { 
    std::vector<std::string> tokens = CSVTokenize(kp_str);
 
-   std::cout << "numper of strings " << tokens.size() << std::endl;
+   std::cout << "number of strings " << tokens.size() << std::endl;
 
    //if no person detected, output 54 zeros
    if (tokens.size() == 0)
@@ -102,8 +102,39 @@ void emitCSV(std::ofstream & outputfile, std::string & kp_str, const op::Array<f
    }  
 }
 
+constexpr unsigned int str2int(const char* str, int h = 0)
+{
+  return !str[h] ? 5381 : (str2int(str, h+1) * 33) ^ str[h];
+}
+
+const std::string getResolutionCode(const std::string resolution)
+{
+  switch(str2int(resolution.c_str()))
+  {
+    case str2int("672x376"):
+      return "CAM_VGA";
+    case str2int("1280x720"):
+      return "CAM_HD";
+    case str2int("1920x1080"):
+      return "CAM_FHD";
+    case str2int("2208x1242"):
+      return "CAM_2K";
+    default:
+      return "NOT SUPPORTED RESOLUTION";
+  }
+}
+
 StereoPoseExtractor::StereoPoseExtractor(int argc, char **argv, const std::string resolution) : resolution_(resolution)
 {  
+
+  resolution_code_ = getResolutionCode(resolution);
+  
+  this->parseIntrinsicMatrix();
+
+  std::cout << "left intrinsics " << intrinsics_left_ << std::endl;
+  std::cout << "right intrinsics " << intrinsics_right_ << std::endl;
+  std::cout << "left distortion " << dist_left_ << std::endl;
+  std::cout << "right distortion " << dist_right_ << std::endl;
 
   gflags::ParseCommandLineFlags(&argc, &argv, true);
 
@@ -124,9 +155,9 @@ StereoPoseExtractor::StereoPoseExtractor(int argc, char **argv, const std::strin
   if (FLAGS_write_keypoint != "")
   {
     outputfile_.open(FLAGS_write_keypoint);
-    //TODO:write header of outputfile
+    //TODO:write header of outputfilef
     outputfile_ << "camera frame subject ";
-    for (int i = 0; i < 54; i++)
+    for (int i = 0; i < 18; i++)
     {
       outputfile_ << "p" << i << "x" << " p" << i << "y" << " p" << i << "conf ";
     }
@@ -226,22 +257,125 @@ void StereoPoseExtractor::process(const cv::Mat & image)
   }
 }
 
+/*
+*TODO: check implementation on openpose library. There exists for sure.
+*/
 void fill2DMatrix(const op::Array<float> & keypoints, cv::Mat & campnts)
 {
 
-  float x = 0.0;
-  float y = 0.0;
+  double x = 0.0;
+  double y = 0.0;
 
   //Ugliest AND SLOWEST
-  std::vector<std::string> spoints = CSVTokenize(keypoints_.toString());
+  std::vector<std::string> spoints = CSVTokenize(keypoints.toString());
 
-  for (int i = 0; i < 18; i += 3)
+  for (int i = 0; i < 54; i += 3)
   {
-    x = atof(spoints[i]);
-    y = atof(spoints[i+1]);
-    cv::Vec2f vec2D(x,y);
-    campnts.at<cv::Vec2f>(0,i) = vec2D;
+    x = atof(spoints[i].c_str());
+    y = atof(spoints[i+1].c_str());
+    cv::Vec2d elem(x,y);
+    campnts.at<cv::Vec2d>(0,i/3) = elem;
   }
+}
+
+void StereoPoseExtractor::parseIntrinsicMatrix(const std::string path)
+{
+  std::string res_code = getResolutionCode(resolution_);
+  std::ifstream infile(path);
+  std::string line;
+  int fx,fy,cx,cy = 0;
+  double k1,k2 = 0.0;
+  cv::Mat intrinsics = cv::Mat::eye(3,3,CV_64F);
+  cv::Mat dist_coeffs = cv::Mat::zeros(8,1,CV_64F);
+
+  std::vector<std::string> lines;
+  std::copy(std::istream_iterator<std::string>(infile),std::istream_iterator<std::string>(),back_inserter(lines));
+
+  for (int i = 0; i < lines.size(); i ++)
+  { 
+
+    if (lines[i].find(resolution_code_) < lines[i].size())
+    { 
+
+      std::cout << "Found at " << lines[i] << std::endl;
+      std::cout << lines[i].find(resolution_code_) << std::endl;
+
+      fx = getInt(lines[i+1],"=");
+      fy = getInt(lines[i+2],"=");
+      cx = getInt(lines[i+3],"=");
+      cy = getInt(lines[i+4],"=");
+      
+      intrinsics.at<double>(0,0) = fx;
+      intrinsics.at<double>(0,2) = cx;
+      intrinsics.at<double>(1,1) = fy;
+      intrinsics.at<double>(1,2) = cy;
+
+      intrinsics_left_ = intrinsics.clone();
+
+      dist_coeffs.at<double>(0,0) = getDouble(lines[i+5],"=");
+      dist_coeffs.at<double>(0,1) = getDouble(lines[i+6],"=");
+
+      dist_left_ = dist_coeffs.clone();
+
+      i = i + 8;
+
+      fx = getInt(lines[i+1],"=");
+      fy = getInt(lines[i+2],"=");
+      cx = getInt(lines[i+3],"=");
+      cy = getInt(lines[i+4],"=");
+      
+      intrinsics.at<double>(0,0) = fx;
+      intrinsics.at<double>(0,2) = cx;
+      intrinsics.at<double>(1,1) = fy;
+      intrinsics.at<double>(1,2) = cy;
+
+      intrinsics_right_ = intrinsics.clone();
+
+      dist_coeffs.at<double>(0,0) = getDouble(lines[i+5],"=");
+      dist_coeffs.at<double>(0,1) = getDouble(lines[i+6],"=");
+
+      dist_right_ = dist_coeffs.clone();
+
+      break;
+
+    }
+  }
+
+  int baseline = 0;
+  cv::Vec3d rotv;
+  std::string quality = resolution_code_.substr(resolution_code_.find("_") + 1);
+
+  int count = 0;
+
+  for(int i = 0; i < lines.size(); i++)
+  {
+    if(lines[i].find("STEREO") < lines[i].size())
+    {
+
+      baseline = getInt(lines[i+1],"=");
+
+      int j = i +1;
+
+      while(count < 3)
+      {
+        if (lines[j].find("_" + quality) < lines[j].size())
+        {
+          rotv[count] = getDouble(lines[j],"=");
+          count ++;
+        }
+
+        j++;
+      }
+      break;
+    }
+  }
+
+  ST_ = cv::Vec3d(-baseline, 0.0, 0.0);
+  cv::Rodrigues(rotv,SR_);
+
+  std::cout << "stereo rotation " << SR_ << std::endl;
+  std::cout << "stereo translation " << ST_ << std::endl;
+
 }
 
 std::vector<cv::Point3f> StereoPoseExtractor::triangulate()
@@ -253,17 +387,32 @@ std::vector<cv::Point3f> StereoPoseExtractor::triangulate()
   int N = 18;
   cv::Mat cam0pnts(1,N,CV_64FC2);
   cv::Mat cam1pnts(1,N,CV_64FC2);
+  cv::Mat cam0pnts_undist(1,N,CV_64FC2);
+  cv::Mat cam1pnts_undist(1,N,CV_64FC2);
+  cv::Mat pnts3d(1,N,CV_64FC4);
+
+  std::vector<cv::Point3f> mf;
 
   fill2DMatrix(poseKeypointsL_, cam0pnts);
   fill2DMatrix(poseKeypointsR_, cam1pnts);
 
-  //TODO: parse camera parameters cam0 and cam1 
-  //cam0 = A*RT A:intrinsic parameter and RT rototranslation (3x4) 3x3 * 3x4 = 3x4
+  /*TODO: get rotations matrix R between the coordinate system of the first and second cameras
+  * get the translation vector between coordinate system of cameras
+  */
+  cv::Mat R1,R2,P1,P2,Q;
+  /*Computes rectification transforms for each head of a calibrated stereo camera*/
+  cv::stereoRectify(intrinsics_left_, dist_left_, intrinsics_right_, dist_right_, cv::Size(1280,720), SR_,ST_, R1, R2, P1, P2, Q);
 
-  //TODO: cv::Mat pnts3D(1,N, CV_64FC4)
-  //      cv::Mat cam0pnts(1,N,CV_64FC2)
-  //      cv::Mat cam1pnts(1,N,CV_64FC2)
-  //      cv::trinagulatePoints(cam0,cam1,cam0pnts,cam1pnts,pnts3D)
+  cv::undistortPoints(cam0pnts, cam0pnts_undist, intrinsics_left_, dist_left_, R1, P1);
+  cv::undistortPoints(cam1pnts, cam1pnts_undist, intrinsics_right_, dist_right_, R2, P2);
+
+
+  cv::triangulatePoints(P1, P2, cam0pnts_undist, cam1pnts_undist, pnts3d);
+
+  exit(-1);
+
+  return mf;
+
 }
 
 std::vector<cv::Point3f> StereoPoseExtractor::triangulate(const std::string & filepath)

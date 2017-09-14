@@ -16,6 +16,7 @@
 #include <openpose/gui/headers.hpp>
 #include <openpose/pose/headers.hpp>
 #include <openpose/utilities/headers.hpp>
+#include "utilities.hpp"
 
 /*g++ ./src/stereocam.cpp  -lopenpose -DUSE_CAFFE -lopencv_core -lopencv_highgui -I /usr/local/cuda-8.0/include/ -L /usr/local/cuda-8.0/lib64  -lcudart -lcublas -lcurand -L /home/lando/projects/openpose_stereo/openpose/3rdparty/caffe/distribute/lib/  -I /home/lando/projects/openpose_stereo/openpose/3rdparty/caffe/distribute/include/ -lcaffe -DUSE_CUDNN  -std=c++11 -pthread -fPIC -fopenmp -O3 -lcudnn -lglog -lgflags -lboost_system -lboost_filesystem -lm -lboost_thread -luvc  -o prova.a
 */
@@ -72,6 +73,8 @@ void cb(uvc_frame_t *frame, void *ptr) {
 
   stereoextractor->process(image);
 
+  stereoextractor->triangulate();
+
   // ------------------------- SHOWING RESULT -------------------------
 
   stereoextractor->visualize(&keep_on);
@@ -79,18 +82,6 @@ void cb(uvc_frame_t *frame, void *ptr) {
   cvReleaseImageHeader(&cvImg);
    
   uvc_free_frame(bgr);
-}
-
-int getHeight(const std::string & resolution)
-{
-  std::string height = resolution.substr(resolution.find("x") + 1);
-  return atoi(height.c_str());
-}
-
-int getWidth(const std::string & resolution)
-{
-  std::string width = resolution.substr(0,resolution.find("x"));
-  return atoi(width.c_str());
 }
 
 
