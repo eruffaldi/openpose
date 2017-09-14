@@ -269,7 +269,11 @@ void fill2DMatrix(const op::Array<float> & keypoints, cv::Mat & campnts)
   //Ugliest AND SLOWEST
   std::vector<std::string> spoints = CSVTokenize(keypoints.toString());
 
-  for (int i = 0; i < 54; i += 3)
+  int people = keypoints.getVolume()/54;
+
+  campnts = cv::Mat(1,people*18,CV_64FC2);
+
+  for (int i = 0; i < 54 * people; i += 3)
   {
     x = atof(spoints[i].c_str());
     y = atof(spoints[i+1].c_str());
@@ -378,27 +382,72 @@ void StereoPoseExtractor::parseIntrinsicMatrix(const std::string path)
 
 }
 
-std::vector<cv::Point3f> StereoPoseExtractor::triangulate()
+void filterVisible(const cv::Mat & pntsL, const cv::Mat & pntsR, cv::Mat & nzL, cv::Mat & nzR)
+{ 
+  cv::Vec2d pl;
+  cv::Vec2d pr;
+  cv::Vec2d zerov(0.0,0.0);
+
+  std::vector<cv::Vec2d> pntsl;
+  std::vector<cv::Vec2d> pntsr;
+
+  for (int i = 0; i < pntsL.cols; i++)
+  {
+    pl = pntsL.at<cv::Vec2d>(0,i);
+    pr = pntsR.at<cv::Vec2d>(0,i);
+
+
+    if (pl != zerov && pr != zerov)
+    {
+      pntsl.push_back(pl);
+      pntsr.push_back(pr);
+    }
+
+  }
+
+  nzL = cv::Mat(1,pntsl.size(),CV_64FC2);
+  nzR = cv::Mat(1,pntsr.size(),CV_64FC2);
+
+  for (int i = 0; i < pntsl.size(); i++)
+  {
+    nzL.at<cv::Vec2d>(0,i) = pntsl[i];
+    nzR.at<cv::Vec2d>(0,i) = pntsr[i];
+  }
+}
+
+cv::Mat StereoPoseExtractor::triangulate()
 {
 
   //I can take all the points negleting if they belong to a specific person 
   //how can I know if the points belong to the same person? 
-  // Just for the beginning, take the first 54 points
-  int N = 18;
-  cv::Mat cam0pnts(1,N,CV_64FC2);
-  cv::Mat cam1pnts(1,N,CV_64FC2);
-  cv::Mat cam0pnts_undist(1,N,CV_64FC2);
-  cv::Mat cam1pnts_undist(1,N,CV_64FC2);
-  cv::Mat pnts3d(1,N,CV_64FC4);
-
-  std::vector<cv::Point3f> mf;
+  int N = 0;
+  cv::Mat cam0pnts;
+  cv::Mat cam1pnts;
+  cv::Mat nz_cam0pnts;
+  cv::Mat nz_cam1pnts;
 
   fill2DMatrix(poseKeypointsL_, cam0pnts);
   fill2DMatrix(poseKeypointsR_, cam1pnts);
 
-  /*TODO: get rotations matrix R between the coordinate system of the first and second cameras
-  * get the translation vector between coordinate system of cameras
-  */
+  //TODO: check the numeber of detected people is the same, otherwise PROBLEM
+  if(cam0pnts.cols != cam1pnts.cols)
+  {
+    std::cout << "number of detectd people differ" << std::endl;
+    return cv::Mat();
+  }
+
+  N = nz_cam1pnts.cols;
+
+  //Undistort points
+  cv::Mat cam0pnts_undist(1,N,CV_64FC2);
+  cv::Mat cam1pnts_undist(1,N,CV_64FC2);
+
+  //If zeros in at least one: remove both 
+  filterVisible(cam0pnts, cam1pnts, cam0pnts, cam1pnts);
+
+  N = cam0pnts.cols;
+  cv::Mat pnts3d(1,N,CV_64FC4);
+
   cv::Mat R1,R2,P1,P2,Q;
   /*Computes rectification transforms for each head of a calibrated stereo camera*/
   cv::stereoRectify(intrinsics_left_, dist_left_, intrinsics_right_, dist_right_, cv::Size(1280,720), SR_,ST_, R1, R2, P1, P2, Q);
@@ -409,9 +458,7 @@ std::vector<cv::Point3f> StereoPoseExtractor::triangulate()
 
   cv::triangulatePoints(P1, P2, cam0pnts_undist, cam1pnts_undist, pnts3d);
 
-  exit(-1);
-
-  return mf;
+  return pnts3d;
 
 }
 

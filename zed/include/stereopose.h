@@ -43,8 +43,8 @@ struct StereoPoseExtractor {
 
 	void parseIntrinsicMatrix(const std::string path = "../settings/SN1499.conf");
 
+	cv::Mat triangulate();
 
-	std::vector<cv::Point3f> triangulate();
 	std::vector<cv::Point3f> triangulate(const std::string &);
 
 	op::CvMatToOpInput *cvMatToOpInput_;
