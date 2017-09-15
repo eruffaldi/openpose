@@ -407,7 +407,35 @@ void StereoPoseExtractor::verify(const cv::Mat & pnts, bool* keep_on)
   }
 }
 
-cv::Mat PoseExtractorFromFile::triangulate()
+/*
+* Fill vector lines with the file rows relative to current frame
+*/
+void PoseExtractorFromFile::getNextBlock(std::vector<std::vector<std::string>> & lines)
 {
-  return cv::Mat();
+
+  bool keep = true;
+
+  while(keep)
+  {
+    std::vector<std::string> tokens = CSVTokenize(line_);
+
+    if(atoi(tokens[2].c_str()) == cur_frame_)
+    {
+      lines.push_back(tokens);
+      getline(file_,line_); 
+    }
+    else{
+      keep = false;
+    }
+  }
+}
+
+void PoseExtractorFromFile::process()
+{
+
+  //TODO: basically fill poseKeypointsR_ and poseKeypointsL_ from file line 
+  cur_frame_ ++;
+  std::vector<std::vector<std::string>> frametokens;
+
+  getNextBlock(frametokens);
 }
