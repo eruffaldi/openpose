@@ -1,4 +1,4 @@
-#include "stereopose.h"
+#include "stereoprocess.h"
 
 
 // See all the available parameter options withe the `--help` flag. E.g. `./build/examples/openpose/openpose.bin --help`.
