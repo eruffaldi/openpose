@@ -47,6 +47,8 @@ struct StereoPoseExtractor {
 
 	std::vector<cv::Point3f> triangulate(const std::string &);
 
+	void dump();
+
 	op::CvMatToOpInput *cvMatToOpInput_;
 	op::CvMatToOpOutput *cvMatToOpOutput_;
 	op::PoseExtractorCaffe *poseExtractorCaffeL_;
@@ -71,6 +73,8 @@ struct StereoPoseExtractor {
 
 	std::string resolution_;
 	std::string resolution_code_;
+
+	int width_,height_;
 
 	cv::Mat intrinsics_left_;
 	cv::Mat intrinsics_right_;

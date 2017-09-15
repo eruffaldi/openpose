@@ -285,6 +285,11 @@ void fill2DMatrix(const op::Array<float> & keypoints, cv::Mat & campnts)
 void StereoPoseExtractor::parseIntrinsicMatrix(const std::string path)
 {
   std::string res_code = getResolutionCode(resolution_);
+
+  width_ = getWidth(resolution_);
+  height_ = getHeight(resolution_);
+
+
   std::ifstream infile(path);
   std::string line;
   int fx,fy,cx,cy = 0;
@@ -375,11 +380,15 @@ void StereoPoseExtractor::parseIntrinsicMatrix(const std::string path)
   }
 
   ST_ = cv::Vec3d(-baseline, 0.0, 0.0);
+
+  double tmp = rotv[0];
+  rotv[0] = rotv[1];
+  rotv[1] = tmp;
+
   cv::Rodrigues(rotv,SR_);
 
   std::cout << "stereo rotation " << SR_ << std::endl;
   std::cout << "stereo translation " << ST_ << std::endl;
-
 }
 
 void filterVisible(const cv::Mat & pntsL, const cv::Mat & pntsR, cv::Mat & nzL, cv::Mat & nzR)
@@ -413,6 +422,24 @@ void filterVisible(const cv::Mat & pntsL, const cv::Mat & pntsR, cv::Mat & nzL, 
     nzL.at<cv::Vec2d>(0,i) = pntsl[i];
     nzR.at<cv::Vec2d>(0,i) = pntsr[i];
   }
+}
+
+void StereoPoseExtractor::dump()
+{
+  std::cout << "left camera matrix"<< std::endl;
+  std::cout << intrinsics_left_ << std::endl;
+  std::cout << "right camera matrix"<< std::endl;
+  std::cout << intrinsics_right_ << std::endl;
+  std::cout << "distortion left"<< std::endl;
+  std::cout << dist_left_ << std::endl;
+  std::cout << "distortion right"<< std::endl;
+  std::cout << dist_right_ << std::endl;
+  std::cout << "Rotiation matrix" << std::endl;
+  std::cout << SR_ << std::endl;
+  std::cout << "Translation matrix" << std::endl;
+  std::cout << ST_ << std::endl;
+  std::cout << "Width " << width_ << std::endl;
+  std::cout << "Height: " << height_ << std::endl;
 }
 
 cv::Mat StereoPoseExtractor::triangulate()
@@ -450,11 +477,10 @@ cv::Mat StereoPoseExtractor::triangulate()
 
   cv::Mat R1,R2,P1,P2,Q;
   /*Computes rectification transforms for each head of a calibrated stereo camera*/
-  cv::stereoRectify(intrinsics_left_, dist_left_, intrinsics_right_, dist_right_, cv::Size(1280,720), SR_,ST_, R1, R2, P1, P2, Q);
+  cv::stereoRectify(intrinsics_left_, dist_left_, intrinsics_right_, dist_right_, cv::Size(width_,height_), SR_,ST_, R1, R2, P1, P2, Q);
 
   cv::undistortPoints(cam0pnts, cam0pnts_undist, intrinsics_left_, dist_left_, R1, P1);
   cv::undistortPoints(cam1pnts, cam1pnts_undist, intrinsics_right_, dist_right_, R2, P2);
-
 
   cv::triangulatePoints(P1, P2, cam0pnts_undist, cam1pnts_undist, pnts3d);
 
