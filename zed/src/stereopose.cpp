@@ -102,39 +102,8 @@ void emitCSV(std::ofstream & outputfile, std::string & kp_str, const op::Array<f
    }  
 }
 
-constexpr unsigned int str2int(const char* str, int h = 0)
-{
-  return !str[h] ? 5381 : (str2int(str, h+1) * 33) ^ str[h];
-}
-
-const std::string getResolutionCode(const std::string resolution)
-{
-  switch(str2int(resolution.c_str()))
-  {
-    case str2int("672x376"):
-      return "CAM_VGA";
-    case str2int("1280x720"):
-      return "CAM_HD";
-    case str2int("1920x1080"):
-      return "CAM_FHD";
-    case str2int("2208x1242"):
-      return "CAM_2K";
-    default:
-      return "NOT SUPPORTED RESOLUTION";
-  }
-}
-
-StereoPoseExtractor::StereoPoseExtractor(int argc, char **argv, const std::string resolution) : resolution_(resolution)
+StereoPoseExtractor::StereoPoseExtractor(int argc, char **argv, const std::string resolution) : cam_(resolution)
 {  
-
-  resolution_code_ = getResolutionCode(resolution);
-  
-  this->parseIntrinsicMatrix();
-
-  std::cout << "left intrinsics " << intrinsics_left_ << std::endl;
-  std::cout << "right intrinsics " << intrinsics_right_ << std::endl;
-  std::cout << "left distortion " << dist_left_ << std::endl;
-  std::cout << "right distortion " << dist_right_ << std::endl;
 
   gflags::ParseCommandLineFlags(&argc, &argv, true);
 
@@ -166,9 +135,9 @@ StereoPoseExtractor::StereoPoseExtractor(int argc, char **argv, const std::strin
 
   // Step 2 - Read Google flags (user defined configuration)
   // outputSize
-  const auto outputSize = op::flagsToPoint(resolution_, "1280x720");
+  const auto outputSize = op::flagsToPoint(cam_.resolution_, "1280x720");
   // netInputSize
-  const auto netInputSize = op::flagsToPoint(FLAGS_net_resolution, "1280x720");
+  const auto netInputSize = op::flagsToPoint(FLAGS_net_resolution, "656x368");
   // netOutputSize
   const auto netOutputSize = netInputSize;
   // poseModel
@@ -282,114 +251,6 @@ void fill2DMatrix(const op::Array<float> & keypoints, cv::Mat & campnts)
   }
 }
 
-void StereoPoseExtractor::parseIntrinsicMatrix(const std::string path)
-{
-  std::string res_code = getResolutionCode(resolution_);
-
-  width_ = getWidth(resolution_);
-  height_ = getHeight(resolution_);
-
-
-  std::ifstream infile(path);
-  std::string line;
-  int fx,fy,cx,cy = 0;
-  double k1,k2 = 0.0;
-  cv::Mat intrinsics = cv::Mat::eye(3,3,CV_64F);
-  cv::Mat dist_coeffs = cv::Mat::zeros(8,1,CV_64F);
-
-  std::vector<std::string> lines;
-  std::copy(std::istream_iterator<std::string>(infile),std::istream_iterator<std::string>(),back_inserter(lines));
-
-  for (int i = 0; i < lines.size(); i ++)
-  { 
-
-    if (lines[i].find(resolution_code_) < lines[i].size())
-    { 
-
-      std::cout << "Found at " << lines[i] << std::endl;
-      std::cout << lines[i].find(resolution_code_) << std::endl;
-
-      fx = getInt(lines[i+1],"=");
-      fy = getInt(lines[i+2],"=");
-      cx = getInt(lines[i+3],"=");
-      cy = getInt(lines[i+4],"=");
-      
-      intrinsics.at<double>(0,0) = fx;
-      intrinsics.at<double>(0,2) = cx;
-      intrinsics.at<double>(1,1) = fy;
-      intrinsics.at<double>(1,2) = cy;
-
-      intrinsics_left_ = intrinsics.clone();
-
-      dist_coeffs.at<double>(0,0) = getDouble(lines[i+5],"=");
-      dist_coeffs.at<double>(0,1) = getDouble(lines[i+6],"=");
-
-      dist_left_ = dist_coeffs.clone();
-
-      i = i + 8;
-
-      fx = getInt(lines[i+1],"=");
-      fy = getInt(lines[i+2],"=");
-      cx = getInt(lines[i+3],"=");
-      cy = getInt(lines[i+4],"=");
-      
-      intrinsics.at<double>(0,0) = fx;
-      intrinsics.at<double>(0,2) = cx;
-      intrinsics.at<double>(1,1) = fy;
-      intrinsics.at<double>(1,2) = cy;
-
-      intrinsics_right_ = intrinsics.clone();
-
-      dist_coeffs.at<double>(0,0) = getDouble(lines[i+5],"=");
-      dist_coeffs.at<double>(0,1) = getDouble(lines[i+6],"=");
-
-      dist_right_ = dist_coeffs.clone();
-
-      break;
-
-    }
-  }
-
-  int baseline = 0;
-  cv::Vec3d rotv;
-  std::string quality = resolution_code_.substr(resolution_code_.find("_") + 1);
-
-  int count = 0;
-
-  for(int i = 0; i < lines.size(); i++)
-  {
-    if(lines[i].find("STEREO") < lines[i].size())
-    {
-
-      baseline = getInt(lines[i+1],"=");
-
-      int j = i +1;
-
-      while(count < 3)
-      {
-        if (lines[j].find("_" + quality) < lines[j].size())
-        {
-          rotv[count] = getDouble(lines[j],"=");
-          count ++;
-        }
-
-        j++;
-      }
-      break;
-    }
-  }
-
-  ST_ = cv::Vec3d(-baseline, 0.0, 0.0);
-
-  double tmp = rotv[0];
-  rotv[0] = rotv[1];
-  rotv[1] = tmp;
-
-  cv::Rodrigues(rotv,SR_);
-
-  std::cout << "stereo rotation " << SR_ << std::endl;
-  std::cout << "stereo translation " << ST_ << std::endl;
-}
 
 void filterVisible(const cv::Mat & pntsL, const cv::Mat & pntsR, cv::Mat & nzL, cv::Mat & nzR)
 { 
@@ -424,22 +285,19 @@ void filterVisible(const cv::Mat & pntsL, const cv::Mat & pntsR, cv::Mat & nzL, 
   }
 }
 
-void StereoPoseExtractor::dump()
-{
-  std::cout << "left camera matrix"<< std::endl;
-  std::cout << intrinsics_left_ << std::endl;
-  std::cout << "right camera matrix"<< std::endl;
-  std::cout << intrinsics_right_ << std::endl;
-  std::cout << "distortion left"<< std::endl;
-  std::cout << dist_left_ << std::endl;
-  std::cout << "distortion right"<< std::endl;
-  std::cout << dist_right_ << std::endl;
-  std::cout << "Rotiation matrix" << std::endl;
-  std::cout << SR_ << std::endl;
-  std::cout << "Translation matrix" << std::endl;
-  std::cout << ST_ << std::endl;
-  std::cout << "Width " << width_ << std::endl;
-  std::cout << "Height: " << height_ << std::endl;
+
+cv::Point2d project(const cv::Mat & intrinsics, const cv::Vec3d & p3d)
+{   
+
+  double z = p3d[2];
+  //double z = 1.0;
+
+  double fx = intrinsics.at<double>(0,0);
+  double fy = intrinsics.at<double>(1,1);
+  double cx = intrinsics.at<double>(0,2);
+  double cy = intrinsics.at<double>(1,2);
+
+  return cv::Point2d((p3d[0]*fx/z+cx)/2, p3d[1]*fy/z +cy);
 }
 
 cv::Mat StereoPoseExtractor::triangulate()
@@ -452,6 +310,12 @@ cv::Mat StereoPoseExtractor::triangulate()
   cv::Mat cam1pnts;
   cv::Mat nz_cam0pnts;
   cv::Mat nz_cam1pnts;
+
+  if (poseKeypointsL_.empty() || poseKeypointsR_.empty())
+  {
+    return cv::Mat();
+  }
+
 
   fill2DMatrix(poseKeypointsL_, cam0pnts);
   fill2DMatrix(poseKeypointsR_, cam1pnts);
@@ -477,14 +341,32 @@ cv::Mat StereoPoseExtractor::triangulate()
 
   cv::Mat R1,R2,P1,P2,Q;
   /*Computes rectification transforms for each head of a calibrated stereo camera*/
-  cv::stereoRectify(intrinsics_left_, dist_left_, intrinsics_right_, dist_right_, cv::Size(width_,height_), SR_,ST_, R1, R2, P1, P2, Q);
+  cv::stereoRectify(cam_.intrinsics_left_, cam_.dist_left_, cam_.intrinsics_right_, cam_.dist_right_, cv::Size(cam_.width_,cam_.height_), cam_.SR_,cam_.ST_, R1, R2, P1, P2, Q);
 
-  cv::undistortPoints(cam0pnts, cam0pnts_undist, intrinsics_left_, dist_left_, R1, P1);
-  cv::undistortPoints(cam1pnts, cam1pnts_undist, intrinsics_right_, dist_right_, R2, P2);
+  cv::undistortPoints(cam0pnts, cam0pnts_undist, cam_.intrinsics_left_, cam_.dist_left_, R1, P1);
+  cv::undistortPoints(cam1pnts, cam1pnts_undist, cam_.intrinsics_right_, cam_.dist_right_, R2, P2);
 
   cv::triangulatePoints(P1, P2, cam0pnts_undist, cam1pnts_undist, pnts3d);
 
-  return pnts3d;
+  std::cout << "4D points " << std::endl;
+  std::cout << pnts3d << std::endl;
+
+  cv::Mat finalpoints(1,N,CV_64FC3);
+
+  for (int i = 0; i < N; i++)
+  { 
+    cv::Vec4d cur = pnts3d.col(i);
+    cv::Vec3d p3d(cur[0]/cur[3], cur[1]/cur[3],cur[2]/cur[3]);
+    finalpoints.at<cv::Vec3d>(0,i) = p3d;
+  }
+
+  std::cout << "Triangulated point " << std::endl;
+  std::cout << finalpoints.col(0) << std::endl;
+  std::cout << "Projected point" << std::endl;
+  cv::Vec3d prova = finalpoints.at<cv::Vec3d>(0,0);
+  std::cout << project(cam_.intrinsics_left_, prova) << std::endl;
+
+  return finalpoints;
 
 }
 

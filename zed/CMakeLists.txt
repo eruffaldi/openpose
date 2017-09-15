@@ -22,7 +22,7 @@ if (CUDA_FOUND)
 
     add_definitions(-DUSE_CAFFE)
     add_definitions(-DUSE_CUDNN)
-    ADD_EXECUTABLE( stereopose src/stereocam.cpp src/stereopose.cpp src/utilities.cpp)
+    ADD_EXECUTABLE( stereopose src/stereocam.cpp src/stereopose.cpp src/utilities.cpp src/stereo_cam.cpp)
     TARGET_LINK_LIBRARIES(stereopose
         ${CUDA_LIBS}
         ${libuvc_LIBRARIES} 

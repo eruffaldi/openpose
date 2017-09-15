@@ -26,3 +26,8 @@ int getWidth(const std::string & resolution);
 int getInt(const std::string & s, const std::string c);
 
 double getDouble(const std::string & s, const std::string c);
+
+constexpr unsigned int str2int(const char* str, int h = 0);
+
+const std::string getResolutionCode(const std::string resolution);
+
