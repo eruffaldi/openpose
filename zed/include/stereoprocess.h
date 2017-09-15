@@ -23,6 +23,7 @@
 #include <gflags/gflags.h> // DEFINE_bool, DEFINE_int32, DEFINE_int64, DEFINE_uint64, DEFINE_double, DEFINE_string
 #include <glog/logging.h> // google::InitGoogleLogging
 
+extern bool keep_on;
 
 
 void splitVertically(const cv::Mat & input, cv::Mat & outputleft, cv::Mat & outputright);
@@ -40,11 +41,13 @@ struct StereoPoseExtractor {
 
 	void process(const cv::Mat & image);
 
-	void visualize(bool * keep_on);
+	void visualize(bool* keep_on);
 
 	void parseIntrinsicMatrix(const std::string path = "../settings/SN1499.conf");
 
 	cv::Mat triangulate();
+
+	void verify(const cv::Mat & pnts, bool* keep_on);
 
 	std::vector<cv::Point3f> triangulate(const std::string &);
 

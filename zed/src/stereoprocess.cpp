@@ -39,6 +39,8 @@ DEFINE_string(write_keypoint,           "",             "Full file path to write
 
 DEFINE_string(keypoint_file,            "",             "Full file path to read keypoint file. Used to get 3D keypoints from file instead of video");
 
+DEFINE_bool(visualize,                  false,          "Visualize keypoints");
+
 
 void splitVertically(const cv::Mat & input, cv::Mat & outputleft, cv::Mat & outputright)
 {
@@ -224,6 +226,11 @@ void StereoPoseExtractor::process(const cv::Mat & image)
     emitCSV(outputfile_, kpl_str, poseKeypointsL_, 0, cur_frame_);
     emitCSV(outputfile_, kpr_str, poseKeypointsR_, 1, cur_frame_);
   }
+
+  if( FLAGS_visualize)
+  {
+    visualize(&keep_on);
+  }
 }
 
 /*
@@ -286,20 +293,6 @@ void filterVisible(const cv::Mat & pntsL, const cv::Mat & pntsR, cv::Mat & nzL, 
 }
 
 
-cv::Point2d project(const cv::Mat & intrinsics, const cv::Vec3d & p3d)
-{   
-
-  double z = p3d[2];
-  //double z = 1.0;
-
-  double fx = intrinsics.at<double>(0,0);
-  double fy = intrinsics.at<double>(1,1);
-  double cx = intrinsics.at<double>(0,2);
-  double cy = intrinsics.at<double>(1,2);
-
-  return cv::Point2d((p3d[0]*fx/z+cx)/2, p3d[1]*fy/z +cy);
-}
-
 cv::Mat StereoPoseExtractor::triangulate()
 {
 
@@ -348,9 +341,6 @@ cv::Mat StereoPoseExtractor::triangulate()
 
   cv::triangulatePoints(P1, P2, cam0pnts_undist, cam1pnts_undist, pnts3d);
 
-  std::cout << "4D points " << std::endl;
-  std::cout << pnts3d << std::endl;
-
   cv::Mat finalpoints(1,N,CV_64FC3);
 
   for (int i = 0; i < N; i++)
@@ -359,12 +349,6 @@ cv::Mat StereoPoseExtractor::triangulate()
     cv::Vec3d p3d(cur[0]/cur[3], cur[1]/cur[3],cur[2]/cur[3]);
     finalpoints.at<cv::Vec3d>(0,i) = p3d;
   }
-
-  std::cout << "Triangulated point " << std::endl;
-  std::cout << finalpoints.col(0) << std::endl;
-  std::cout << "Projected point" << std::endl;
-  cv::Vec3d prova = finalpoints.at<cv::Vec3d>(0,0);
-  std::cout << project(cam_.intrinsics_left_, prova) << std::endl;
 
   return finalpoints;
 
@@ -385,6 +369,45 @@ void StereoPoseExtractor::visualize(bool * keep_on)
   cv::imshow("Side By Side", sidebyside_out);
 
   int k = cvWaitKey(2);
+  if (k == 27)
+  {
+      *keep_on = false;
+  }
+}
+
+void StereoPoseExtractor::verify(const cv::Mat & pnts, bool* keep_on)
+{
+  
+  std::vector<cv::Point2d> points2D(pnts.cols); 
+
+  int inside = 0;
+
+  std::cout << "number of points: " << pnts.cols << std::endl; 
+
+  for (unsigned int i = 0; i < pnts.cols; i++)
+  {
+    cv::Vec3d prova = pnts.at<cv::Vec3d>(0,i);
+    points2D[i] = project(cam_.intrinsics_left_, prova);
+
+    if(points2D[i].x < cam_.width_ && points2D[i].y < cam_.height_&& points2D[i].x > 0 && points2D[i].y > 0)
+    {
+      inside ++;
+    }
+  } 
+
+  std::cout << "points inside " << inside << std::endl;
+
+  //TODO: write circles in projected points
+  cv::Mat verification = imageleft_.clone();
+  for (auto & c : points2D)
+  {
+    cv::circle(verification,c,4,cv::Scalar(0,0,255),3);
+  }
+
+
+  cv::namedWindow("Verification", CV_WINDOW_AUTOSIZE);
+  cv::imshow("Verification", verification);
+  int k = cvWaitKey(4);
   if (k == 27)
   {
       *keep_on = false;

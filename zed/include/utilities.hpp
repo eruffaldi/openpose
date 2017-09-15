@@ -31,3 +31,5 @@ constexpr unsigned int str2int(const char* str, int h = 0);
 
 const std::string getResolutionCode(const std::string resolution);
 
+cv::Point2d project(const cv::Mat & intrinsics, const cv::Vec3d & p3d);
+

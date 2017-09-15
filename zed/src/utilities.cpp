@@ -47,3 +47,17 @@ const std::string getResolutionCode(const std::string resolution)
       return "NOT SUPPORTED RESOLUTION";
   }
 }
+
+cv::Point2d project(const cv::Mat & intrinsics, const cv::Vec3d & p3d)
+{   
+
+  double z = p3d[2];
+  //double z = 1.0;
+
+  double fx = intrinsics.at<double>(0,0);
+  double fy = intrinsics.at<double>(1,1);
+  double cx = intrinsics.at<double>(0,2);
+  double cy = intrinsics.at<double>(1,2);
+
+  return cv::Point2d((p3d[0]*fx/z+cx), (p3d[1]*fy/z +cy));
+}

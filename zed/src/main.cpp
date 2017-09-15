@@ -26,15 +26,15 @@
 
 DEFINE_string(video,                    "",             "Use a video instead of the camera");
 
-DEFINE_bool(visualize,                  false,          "Visualize keypoints");
-
 DEFINE_string(resolution,               "1280x720",     "The image resolution (display and output). Use \"-1x-1\" to force the program to use the"
                                                         " default images resolution.");
 
-DEFINE_int32(fps,                       60,              "Camera capture speed. Frame per second");                  
+DEFINE_int32(fps,                       60,              "Camera capture speed. Frame per second");
 
-bool keep_on = true;
+DEFINE_bool(verify,                     false,            "Show projection of triangulated points");                  
+
 StereoPoseExtractor * stereoextractor;
+bool keep_on = true;
 
 
 /* This callback function runs once per frame. Use it to perform any
@@ -73,11 +73,14 @@ void cb(uvc_frame_t *frame, void *ptr) {
 
   stereoextractor->process(image);
 
-  stereoextractor->triangulate();
+  cv::Mat pnts = stereoextractor->triangulate();
 
   // ------------------------- SHOWING RESULT -------------------------
 
-  stereoextractor->visualize(&keep_on);
+  if( FLAGS_verify )
+  {
+  stereoextractor->verify(pnts,&keep_on);
+  }
    
   cvReleaseImageHeader(&cvImg);
    
