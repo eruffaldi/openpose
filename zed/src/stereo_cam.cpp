@@ -1,8 +1,11 @@
 #include "stereo_cam.h"
 
 StereoCamera::StereoCamera(const std::string resolution) : resolution_(resolution)
-{
-  std::string res_code = getResolutionCode(resolution_);
+{ 
+
+  std::cout << "resolution " << resolution_ << std::endl;
+  resolution_code_ = getResolutionCode(resolution_);
+  std::cout << "resolution code " << resolution_code_ << std::endl;
   
   width_ = getWidth(resolution_);
   height_ = getHeight(resolution_);
@@ -10,7 +13,7 @@ StereoCamera::StereoCamera(const std::string resolution) : resolution_(resolutio
 
   std::ifstream infile(path_);
   std::string line;
-  int fx,fy,cx,cy = 0;
+  double fx,fy,cx,cy = 0;
   double k1,k2 = 0.0;
   cv::Mat intrinsics = cv::Mat::eye(3,3,CV_64F);
   cv::Mat dist_coeffs = cv::Mat::zeros(8,1,CV_64F);
@@ -20,17 +23,16 @@ StereoCamera::StereoCamera(const std::string resolution) : resolution_(resolutio
 
   for (int i = 0; i < lines.size(); i ++)
   { 
-
     if (lines[i].find(resolution_code_) < lines[i].size())
     { 
 
       std::cout << "Found at " << lines[i] << std::endl;
       std::cout << lines[i].find(resolution_code_) << std::endl;
 
-      fx = getInt(lines[i+1],"=");
-      fy = getInt(lines[i+2],"=");
-      cx = getInt(lines[i+3],"=");
-      cy = getInt(lines[i+4],"=");
+      fx = getDouble(lines[i+1],"=");
+      fy = getDouble(lines[i+2],"=");
+      cx = getDouble(lines[i+3],"=");
+      cy = getDouble(lines[i+4],"=");
       
       intrinsics.at<double>(0,0) = fx;
       intrinsics.at<double>(0,2) = cx;
@@ -46,10 +48,10 @@ StereoCamera::StereoCamera(const std::string resolution) : resolution_(resolutio
 
       i = i + 8;
 
-      fx = getInt(lines[i+1],"=");
-      fy = getInt(lines[i+2],"=");
-      cx = getInt(lines[i+3],"=");
-      cy = getInt(lines[i+4],"=");
+      fx = getDouble(lines[i+1],"=");
+      fy = getDouble(lines[i+2],"=");
+      cx = getDouble(lines[i+3],"=");
+      cy = getDouble(lines[i+4],"=");
       
       intrinsics.at<double>(0,0) = fx;
       intrinsics.at<double>(0,2) = cx;
@@ -68,7 +70,7 @@ StereoCamera::StereoCamera(const std::string resolution) : resolution_(resolutio
     }
   }
 
-  int baseline = 0;
+  double baseline = 0;
   cv::Vec3d rotv;
   std::string quality = resolution_code_.substr(resolution_code_.find("_") + 1);
 
@@ -79,7 +81,7 @@ StereoCamera::StereoCamera(const std::string resolution) : resolution_(resolutio
     if(lines[i].find("STEREO") < lines[i].size())
     {
 
-      baseline = getInt(lines[i+1],"=");
+      baseline = getDouble(lines[i+1],"=");
 
       int j = i +1;
 

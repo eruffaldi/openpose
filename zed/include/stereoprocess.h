@@ -45,7 +45,7 @@ struct StereoPoseExtractor {
 
 	void parseIntrinsicMatrix(const std::string path = "../settings/SN1499.conf");
 
-	cv::Mat triangulate();
+	virtual cv::Mat triangulate();
 
 	void verify(const cv::Mat & pnts, bool* keep_on);
 
@@ -74,4 +74,15 @@ struct StereoPoseExtractor {
 	cv::Mat outputImageL_;
 
 	StereoCamera cam_;
+};
+
+struct PoseExtractorFromFile : StereoPoseExtractor {
+
+	PoseExtractorFromFile(int argc, char **argv, const std::string resolution, const std::string path) 
+                                              : StereoPoseExtractor(argc,argv,resolution), filepath_(path){}
+                                        
+	cv::Mat triangulate();
+
+	const std::string filepath_;
+
 };

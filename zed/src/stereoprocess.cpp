@@ -37,8 +37,6 @@ DEFINE_string(write_video,              "",             "Full file path to write
 
 DEFINE_string(write_keypoint,           "",             "Full file path to write people body pose keypoints data. Only CSV format supported");  
 
-DEFINE_string(keypoint_file,            "",             "Full file path to read keypoint file. Used to get 3D keypoints from file instead of video");
-
 DEFINE_bool(visualize,                  false,          "Visualize keypoints");
 
 
@@ -354,11 +352,6 @@ cv::Mat StereoPoseExtractor::triangulate()
 
 }
 
-std::vector<cv::Point3f> StereoPoseExtractor::triangulate(const std::string & filepath)
-{
-  std::string keypointpath = FLAGS_keypoint_file;
-}
-
 void StereoPoseExtractor::visualize(bool * keep_on)
 {
   //TODO: make a video with 2 frame side by side
@@ -401,7 +394,7 @@ void StereoPoseExtractor::verify(const cv::Mat & pnts, bool* keep_on)
   cv::Mat verification = imageleft_.clone();
   for (auto & c : points2D)
   {
-    cv::circle(verification,c,4,cv::Scalar(0,0,255),3);
+    cv::circle(verification,c,4,cv::Scalar(0,0,255),2);
   }
 
 
@@ -412,4 +405,9 @@ void StereoPoseExtractor::verify(const cv::Mat & pnts, bool* keep_on)
   {
       *keep_on = false;
   }
+}
+
+cv::Mat PoseExtractorFromFile::triangulate()
+{
+  return cv::Mat();
 }

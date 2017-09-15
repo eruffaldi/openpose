@@ -31,7 +31,9 @@ DEFINE_string(resolution,               "1280x720",     "The image resolution (d
 
 DEFINE_int32(fps,                       60,              "Camera capture speed. Frame per second");
 
-DEFINE_bool(verify,                     false,            "Show projection of triangulated points");                  
+DEFINE_bool(verify,                     false,            "Show projection of triangulated points"); 
+
+DEFINE_string(file,                     "",               "Get triangulated points from a CSV file with 2D points");                 
 
 StereoPoseExtractor * stereoextractor;
 bool keep_on = true;
