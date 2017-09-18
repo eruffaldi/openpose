@@ -95,7 +95,14 @@ int main(int argc, char **argv) {
   // Parsing command line flags
   gflags::ParseCommandLineFlags(&argc, &argv, true);
 
-  stereoextractor = new StereoPoseExtractor(argc, argv, FLAGS_resolution);
+  if(FLAGS_file == "")
+  {
+    stereoextractor = new StereoPoseExtractor(argc, argv, FLAGS_resolution);
+  }
+  else
+  {
+    stereoextractor = new PoseExtractorFromFile(argc, argv, FLAGS_resolution, FLAGS_file);
+  }
 
   if( FLAGS_video == "" )
   {
@@ -216,7 +223,9 @@ int main(int argc, char **argv) {
 
       stereoextractor->process(image);
 
-      stereoextractor->visualize(&keep_on);
+      cv::Mat pnts = stereoextractor->triangulate();
+
+      //stereoextractor->visualize(&keep_on);
     }
 
   } 

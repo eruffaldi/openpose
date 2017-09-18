@@ -13,7 +13,7 @@ DEFINE_string(image_path,               "examples/media/COCO_val2014_00000000019
 // OpenPose
 DEFINE_string(model_pose,               "COCO",         "Model to be used. E.g. `COCO` (18 keypoints), `MPI` (15 keypoints, ~10% faster), "
                                                         "`MPI_4_layers` (15 keypoints, even faster but less accurate).");
-DEFINE_string(model_folder,             "/home/lando/projects/openpose_stereo/openpose/models/",      "Folder path (absolute or relative) where the models (pose, face, ...) are located.");
+DEFINE_string(model_folder,             "/home/lando/projects/stereo_pose/openpose/models/",      "Folder path (absolute or relative) where the models (pose, face, ...) are located.");
 DEFINE_string(net_resolution,           "656x368",      "Multiples of 16. If it is increased, the accuracy potentially increases. If it is decreased,"
                                                         " the speed increases. For maximum speed-accuracy balance, it should keep the closest aspect"
                                                         " ratio possible to the images or videos to be processed. E.g. the default `656x368` is"
@@ -373,14 +373,14 @@ void StereoPoseExtractor::verify(const cv::Mat & pnts, bool* keep_on)
   
   std::vector<cv::Point2d> points2D(pnts.cols); 
 
+  cv::projectPoints(pnts,cv::Mat::eye(3,3,CV_64FC1),cv::Vec3d(0,0,0),cam_.intrinsics_left_,cam_.dist_left_,points2D);
+
   int inside = 0;
 
   std::cout << "number of points: " << pnts.cols << std::endl; 
 
   for (unsigned int i = 0; i < pnts.cols; i++)
   {
-    cv::Vec3d prova = pnts.at<cv::Vec3d>(0,i);
-    points2D[i] = project(cam_.intrinsics_left_, prova);
 
     if(points2D[i].x < cam_.width_ && points2D[i].y < cam_.height_&& points2D[i].x > 0 && points2D[i].y > 0)
     {
@@ -419,7 +419,7 @@ void PoseExtractorFromFile::getNextBlock(std::vector<std::vector<std::string>> &
   {
     std::vector<std::string> tokens = CSVTokenize(line_);
 
-    if(atoi(tokens[2].c_str()) == cur_frame_)
+    if(atoi(tokens[1].c_str()) == cur_frame_)
     {
       lines.push_back(tokens);
       getline(file_,line_); 
@@ -430,12 +430,142 @@ void PoseExtractorFromFile::getNextBlock(std::vector<std::vector<std::string>> &
   }
 }
 
-void PoseExtractorFromFile::process()
+
+void fillPointsFromFile(const std::vector<std::string> & line, std::vector<cv::Point2d> & points)
 {
 
-  //TODO: basically fill poseKeypointsR_ and poseKeypointsL_ from file line 
+  for(int i = 3; i < line.size(); i = i + 3)
+  {
+    cv::Point2d point(atof(line[i].c_str()), atof(line[i+1].c_str()));
+    points.push_back(point);
+  }
+}
+
+void PoseExtractorFromFile::process(const cv::Mat & image)
+{
+
   cur_frame_ ++;
+
   std::vector<std::vector<std::string>> frametokens;
 
+  points_left_.clear();
+  points_right_.clear();
+
   getNextBlock(frametokens);
+
+  for (auto & s : frametokens)
+  {
+    if (strcmp(s[0].c_str(), "0") == 0)
+    {
+      fillPointsFromFile(s,points_left_);
+    }
+    else
+    {
+      fillPointsFromFile(s,points_right_);
+    }
+  }
+}
+
+void PoseExtractorFromFile::visualize(bool * keep_on)
+{ 
+
+  cv::Mat sidebyside_out;
+
+  outputImageL_ = imageleft_.clone();
+  outputImageR_ = imageright_.clone();
+
+  for (auto & c : points_left_)
+  {
+    cv::circle(outputImageL_,c,4,cv::Scalar(0,0,255),2);
+  }
+
+  for (auto & c : points_right_)
+  {
+    cv::circle(outputImageR_,c,4,cv::Scalar(0,0,255),2);
+  }
+
+  cv::hconcat(outputImageL_, outputImageR_, sidebyside_out);
+
+  cv::namedWindow("Side By Side", CV_WINDOW_AUTOSIZE);
+  cv::imshow("Side By Side", sidebyside_out);
+
+  int k = cvWaitKey(2);
+  if (k == 27)
+  {
+      *keep_on = false;
+  }
+}
+
+void vector2Mat(const std::vector<cv::Point2d> & points, cv::Mat & pmat)
+{
+
+  pmat = cv::Mat(1,points.size(),CV_64FC2);
+
+  for (int i = 0; i < points.size(); i++)
+  {
+    pmat.at<cv::Point2d>(0,i) = points[i];
+  }
+
+}
+
+cv::Mat PoseExtractorFromFile::triangulate()
+{
+
+  //I can take all the points negleting if they belong to a specific person 
+  //how can I know if the points belong to the same person? 
+  int N = 0;
+  cv::Mat cam0pnts;
+  cv::Mat cam1pnts;
+  cv::Mat nz_cam0pnts;
+  cv::Mat nz_cam1pnts;
+
+
+  if (points_left_.empty() || points_right_.empty())
+  {
+    return cv::Mat();
+  }
+
+
+  vector2Mat(points_left_, cam0pnts);
+  vector2Mat(points_right_, cam1pnts);
+
+  //TODO: check the numeber of detected people is the same, otherwise PROBLEM
+  if(cam0pnts.cols != cam1pnts.cols)
+  {
+    std::cout << "number of detectd people differs at frame " << cur_frame_ <<std::endl;
+    return cv::Mat();
+  }
+
+  N = nz_cam1pnts.cols;
+
+  //Undistort points
+  cv::Mat cam0pnts_undist(1,N,CV_64FC2);
+  cv::Mat cam1pnts_undist(1,N,CV_64FC2);
+
+  //If zeros in at least one: remove both 
+  filterVisible(cam0pnts, cam1pnts, cam0pnts, cam1pnts);
+
+  N = cam0pnts.cols;
+  cv::Mat pnts3d(1,N,CV_64FC4);
+
+  cv::Mat R1,R2,P1,P2,Q;
+  /*Computes rectification transforms for each head of a calibrated stereo camera*/
+  cv::stereoRectify(cam_.intrinsics_left_, cam_.dist_left_, cam_.intrinsics_right_, cam_.dist_right_, cv::Size(cam_.width_,cam_.height_), cam_.SR_,cam_.ST_, R1, R2, P1, P2, Q);
+
+  cv::undistortPoints(cam0pnts, cam0pnts_undist, cam_.intrinsics_left_, cam_.dist_left_, R1, P1);
+  cv::undistortPoints(cam1pnts, cam1pnts_undist, cam_.intrinsics_right_, cam_.dist_right_, R2, P2);
+
+  cv::triangulatePoints(P1, P2, cam0pnts_undist, cam1pnts_undist, pnts3d);
+
+  cv::Mat finalpoints(1,N,CV_64FC3);
+
+  for (int i = 0; i < N; i++)
+  { 
+    cv::Vec4d cur = pnts3d.col(i);
+    cv::Vec3d p3d(cur[0]/cur[3], cur[1]/cur[3],cur[2]/cur[3]);
+    finalpoints.at<cv::Vec3d>(0,i) = p3d;
+  }
+
+  return finalpoints;
+
 }
