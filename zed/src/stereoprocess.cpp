@@ -102,6 +102,113 @@ void emitCSV(std::ofstream & outputfile, std::string & kp_str, const op::Array<f
    }  
 }
 
+void filterVisible(const cv::Mat & pntsL, const cv::Mat & pntsR, cv::Mat & nzL, cv::Mat & nzR)
+{ 
+  cv::Vec2d pl;
+  cv::Vec2d pr;
+  cv::Vec2d zerov(0.0,0.0);
+
+  std::vector<cv::Vec2d> pntsl;
+  std::vector<cv::Vec2d> pntsr;
+
+  for (int i = 0; i < pntsL.cols; i++)
+  {
+    pl = pntsL.at<cv::Vec2d>(0,i);
+    pr = pntsR.at<cv::Vec2d>(0,i);
+
+
+    if (pl != zerov && pr != zerov)
+    {
+      pntsl.push_back(pl);
+      pntsr.push_back(pr);
+    }
+
+  }
+
+  nzL = cv::Mat(1,pntsl.size(),CV_64FC2);
+  nzR = cv::Mat(1,pntsr.size(),CV_64FC2);
+
+  for (int i = 0; i < pntsl.size(); i++)
+  {
+    nzL.at<cv::Vec2d>(0,i) = pntsl[i];
+    nzR.at<cv::Vec2d>(0,i) = pntsr[i];
+  }
+}
+
+void StereoPoseExtractor::triangulateTrue(cv::Mat & cam0pnts, cv::Mat & cam1pnts, cv::Mat & finalpoints)
+{
+  int N = 0;
+  cv::Mat nz_cam0pnts;
+  cv::Mat nz_cam1pnts;
+  //TODO: check the numeber of detected people is the same, otherwise PROBLEM
+  if(cam0pnts.cols != cam1pnts.cols)
+  {
+    std::cout << "number of detectd people differ" << std::endl;
+    return;
+  }
+
+  N = nz_cam1pnts.cols;
+
+  //Undistort points
+  cv::Mat cam0pnts_undist(1,N,CV_64FC2);
+  cv::Mat cam1pnts_undist(1,N,CV_64FC2);
+
+  //If zeros in at least one: remove both 
+  filterVisible(cam0pnts, cam1pnts, cam0pnts, cam1pnts);
+
+  N = cam0pnts.cols;
+  cv::Mat pnts3d(1,N,CV_64FC4);
+
+  cv::Mat R1,R2,P1,P2,Q;
+  /*Computes rectification transforms for each head of a calibrated stereo camera*/
+  //cv::stereoRectify(cam_.intrinsics_left_, cam_.dist_left_, cam_.intrinsics_right_, cam_.dist_right_, cv::Size(cam_.width_,cam_.height_), cam_.SR_,cam_.ST_, R1, R2, P1, P2, Q);
+
+  cv::undistortPoints(cam0pnts, cam0pnts_undist, cam_.intrinsics_left_, cam_.dist_left_, cam_.intrinsics_left_);
+  cv::undistortPoints(cam1pnts, cam1pnts_undist, cam_.intrinsics_right_, cam_.dist_right_, cam_.intrinsics_right_);
+
+  cv::Mat proj_left,proj_right;
+
+  proj_left = cv::Mat(3,4,CV_64FC1);
+  proj_right = cv::Mat(3,4,CV_64FC1);
+
+  for (int i = 0; i < 3; i++)
+  {
+    for ( int j = 0; j < 3; j++)
+    {
+      proj_left.at<double>(i,j) = cam_.intrinsics_left_.at<double>(i,j);
+    }
+  }
+
+  for ( int i = 0; i < 3; i++)
+  {
+    proj_left.at<double>(i,3) = 0.0;
+  }
+
+
+  cv::Mat rototran;
+  cv::hconcat(cv::Mat::eye(3,3,CV_64FC1), cam_.ST_, rototran);
+
+  proj_right = cam_.intrinsics_left_ * rototran;
+
+  std::cout << "projection left " << std::endl;
+  std::cout << proj_left << std::endl;
+  std::cout << "projection right"  << std::endl;
+  std::cout << proj_right << std::endl;
+
+  //exit(-1);
+
+  cv::triangulatePoints(proj_left, proj_right, cam0pnts_undist, cam1pnts_undist, pnts3d);
+
+  finalpoints = cv::Mat(1,N,CV_64FC3);
+
+  for (int i = 0; i < N; i++)
+  { 
+    cv::Vec4d cur = pnts3d.col(i);
+    cv::Vec3d p3d(cur[0]/cur[3], cur[1]/cur[3],cur[2]/cur[3]);
+    finalpoints.at<cv::Vec3d>(0,i) = p3d;
+  }
+}
+
 StereoPoseExtractor::StereoPoseExtractor(int argc, char **argv, const std::string resolution) : cam_(resolution)
 {  
 
@@ -257,50 +364,15 @@ void fill2DMatrix(const op::Array<float> & keypoints, cv::Mat & campnts)
 }
 
 
-void filterVisible(const cv::Mat & pntsL, const cv::Mat & pntsR, cv::Mat & nzL, cv::Mat & nzR)
-{ 
-  cv::Vec2d pl;
-  cv::Vec2d pr;
-  cv::Vec2d zerov(0.0,0.0);
-
-  std::vector<cv::Vec2d> pntsl;
-  std::vector<cv::Vec2d> pntsr;
-
-  for (int i = 0; i < pntsL.cols; i++)
-  {
-    pl = pntsL.at<cv::Vec2d>(0,i);
-    pr = pntsR.at<cv::Vec2d>(0,i);
-
-
-    if (pl != zerov && pr != zerov)
-    {
-      pntsl.push_back(pl);
-      pntsr.push_back(pr);
-    }
-
-  }
-
-  nzL = cv::Mat(1,pntsl.size(),CV_64FC2);
-  nzR = cv::Mat(1,pntsr.size(),CV_64FC2);
-
-  for (int i = 0; i < pntsl.size(); i++)
-  {
-    nzL.at<cv::Vec2d>(0,i) = pntsl[i];
-    nzR.at<cv::Vec2d>(0,i) = pntsr[i];
-  }
-}
-
 
 cv::Mat StereoPoseExtractor::triangulate()
 {
 
   //I can take all the points negleting if they belong to a specific person 
   //how can I know if the points belong to the same person? 
-  int N = 0;
   cv::Mat cam0pnts;
   cv::Mat cam1pnts;
-  cv::Mat nz_cam0pnts;
-  cv::Mat nz_cam1pnts;
+  cv::Mat finalpoints;
 
   if (poseKeypointsL_.empty() || poseKeypointsR_.empty())
   {
@@ -311,42 +383,7 @@ cv::Mat StereoPoseExtractor::triangulate()
   fill2DMatrix(poseKeypointsL_, cam0pnts);
   fill2DMatrix(poseKeypointsR_, cam1pnts);
 
-  //TODO: check the numeber of detected people is the same, otherwise PROBLEM
-  if(cam0pnts.cols != cam1pnts.cols)
-  {
-    std::cout << "number of detectd people differ" << std::endl;
-    return cv::Mat();
-  }
-
-  N = nz_cam1pnts.cols;
-
-  //Undistort points
-  cv::Mat cam0pnts_undist(1,N,CV_64FC2);
-  cv::Mat cam1pnts_undist(1,N,CV_64FC2);
-
-  //If zeros in at least one: remove both 
-  filterVisible(cam0pnts, cam1pnts, cam0pnts, cam1pnts);
-
-  N = cam0pnts.cols;
-  cv::Mat pnts3d(1,N,CV_64FC4);
-
-  cv::Mat R1,R2,P1,P2,Q;
-  /*Computes rectification transforms for each head of a calibrated stereo camera*/
-  cv::stereoRectify(cam_.intrinsics_left_, cam_.dist_left_, cam_.intrinsics_right_, cam_.dist_right_, cv::Size(cam_.width_,cam_.height_), cam_.SR_,cam_.ST_, R1, R2, P1, P2, Q);
-
-  cv::undistortPoints(cam0pnts, cam0pnts_undist, cam_.intrinsics_left_, cam_.dist_left_, R1, P1);
-  cv::undistortPoints(cam1pnts, cam1pnts_undist, cam_.intrinsics_right_, cam_.dist_right_, R2, P2);
-
-  cv::triangulatePoints(P1, P2, cam0pnts_undist, cam1pnts_undist, pnts3d);
-
-  cv::Mat finalpoints(1,N,CV_64FC3);
-
-  for (int i = 0; i < N; i++)
-  { 
-    cv::Vec4d cur = pnts3d.col(i);
-    cv::Vec3d p3d(cur[0]/cur[3], cur[1]/cur[3],cur[2]/cur[3]);
-    finalpoints.at<cv::Vec3d>(0,i) = p3d;
-  }
+  triangulateTrue(cam0pnts, cam1pnts, finalpoints);
 
   return finalpoints;
 
@@ -400,10 +437,14 @@ void StereoPoseExtractor::verify(const cv::Mat & pnts, bool* keep_on)
 
   cv::namedWindow("Verification", CV_WINDOW_AUTOSIZE);
   cv::imshow("Verification", verification);
-  int k = cvWaitKey(4);
+  int k = cvWaitKey(0);
   if (k == 27)
   {
       *keep_on = false;
+  }
+  if (k == 's')
+  {
+    cv:imwrite("../data/3Dpoints.jpg", verification);
   }
 }
 
@@ -513,11 +554,9 @@ cv::Mat PoseExtractorFromFile::triangulate()
 
   //I can take all the points negleting if they belong to a specific person 
   //how can I know if the points belong to the same person? 
-  int N = 0;
   cv::Mat cam0pnts;
   cv::Mat cam1pnts;
-  cv::Mat nz_cam0pnts;
-  cv::Mat nz_cam1pnts;
+  cv::Mat finalpoints;
 
 
   if (points_left_.empty() || points_right_.empty())
@@ -529,42 +568,7 @@ cv::Mat PoseExtractorFromFile::triangulate()
   vector2Mat(points_left_, cam0pnts);
   vector2Mat(points_right_, cam1pnts);
 
-  //TODO: check the numeber of detected people is the same, otherwise PROBLEM
-  if(cam0pnts.cols != cam1pnts.cols)
-  {
-    std::cout << "number of detectd people differs at frame " << cur_frame_ <<std::endl;
-    return cv::Mat();
-  }
-
-  N = nz_cam1pnts.cols;
-
-  //Undistort points
-  cv::Mat cam0pnts_undist(1,N,CV_64FC2);
-  cv::Mat cam1pnts_undist(1,N,CV_64FC2);
-
-  //If zeros in at least one: remove both 
-  filterVisible(cam0pnts, cam1pnts, cam0pnts, cam1pnts);
-
-  N = cam0pnts.cols;
-  cv::Mat pnts3d(1,N,CV_64FC4);
-
-  cv::Mat R1,R2,P1,P2,Q;
-  /*Computes rectification transforms for each head of a calibrated stereo camera*/
-  cv::stereoRectify(cam_.intrinsics_left_, cam_.dist_left_, cam_.intrinsics_right_, cam_.dist_right_, cv::Size(cam_.width_,cam_.height_), cam_.SR_,cam_.ST_, R1, R2, P1, P2, Q);
-
-  cv::undistortPoints(cam0pnts, cam0pnts_undist, cam_.intrinsics_left_, cam_.dist_left_, R1, P1);
-  cv::undistortPoints(cam1pnts, cam1pnts_undist, cam_.intrinsics_right_, cam_.dist_right_, R2, P2);
-
-  cv::triangulatePoints(P1, P2, cam0pnts_undist, cam1pnts_undist, pnts3d);
-
-  cv::Mat finalpoints(1,N,CV_64FC3);
-
-  for (int i = 0; i < N; i++)
-  { 
-    cv::Vec4d cur = pnts3d.col(i);
-    cv::Vec3d p3d(cur[0]/cur[3], cur[1]/cur[3],cur[2]/cur[3]);
-    finalpoints.at<cv::Vec3d>(0,i) = p3d;
-  }
+  triangulateTrue(cam0pnts, cam1pnts, finalpoints);
 
   return finalpoints;
 

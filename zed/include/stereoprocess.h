@@ -39,6 +39,8 @@ struct StereoPoseExtractor {
 
 	void destroy();
 
+	void triangulateTrue(cv::Mat & cam0pnts, cv::Mat & cam1pnts, cv::Mat & finalpoints);
+
 	virtual void visualize(bool* keep_on);
 
 	void parseIntrinsicMatrix(const std::string path = "../settings/SN1499.conf");

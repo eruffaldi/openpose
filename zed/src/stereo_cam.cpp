@@ -99,7 +99,7 @@ StereoCamera::StereoCamera(const std::string resolution) : resolution_(resolutio
     }
   }
 
-  ST_ = cv::Vec3d(-baseline, 0.0, 0.0);
+  ST_ = cv::Vec3d(-baseline*0.001, 0.0, 0.0);
 
   double tmp = rotv[0];
   rotv[0] = rotv[1];
