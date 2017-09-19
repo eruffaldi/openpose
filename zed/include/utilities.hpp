@@ -33,3 +33,10 @@ const std::string getResolutionCode(const std::string resolution);
 
 cv::Point2d project(const cv::Mat & intrinsics, const cv::Vec3d & p3d);
 
+void vector2Mat(const std::vector<cv::Point2d> & points, cv::Mat & pmat);
+
+void opArray2Mat(const op::Array<float> & keypoints, cv::Mat & campnts);
+
+std::vector<std::string> CSVTokenize(std::string kpl_str);
+
+void emitCSV(std::ofstream & outputfile, std::string & kp_str, const op::Array<float> & poseKeypoints, int camera, int cur_frame);

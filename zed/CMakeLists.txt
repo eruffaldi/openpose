@@ -22,8 +22,22 @@ if (CUDA_FOUND)
 
     add_definitions(-DUSE_CAFFE)
     add_definitions(-DUSE_CUDNN)
-    ADD_EXECUTABLE( stereopose src/main.cpp src/stereoprocess.cpp src/utilities.cpp src/stereo_cam.cpp)
-    TARGET_LINK_LIBRARIES(stereopose
+
+    ADD_EXECUTABLE( stereopose_rt examples/online.cpp src/stereoprocess.cpp src/utilities.cpp src/stereo_cam.cpp)
+    ADD_EXECUTABLE( stereopose_of examples/offline.cpp src/stereoprocess.cpp src/utilities.cpp src/stereo_cam.cpp)
+
+    TARGET_LINK_LIBRARIES(stereopose_rt
+        ${CUDA_LIBS}
+        ${libuvc_LIBRARIES} 
+        ${OpenCV_LIBS}
+        ${Boost_LIBRARIES}
+        ${CAFFE_DIR}/build/lib/libcaffe.so
+        glog
+        gflags
+        openpose
+    )
+
+    TARGET_LINK_LIBRARIES(stereopose_of
         ${CUDA_LIBS}
         ${libuvc_LIBRARIES} 
         ${OpenCV_LIBS}

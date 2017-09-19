@@ -39,13 +39,13 @@ struct StereoPoseExtractor {
 
 	void destroy();
 
-	void triangulateTrue(cv::Mat & cam0pnts, cv::Mat & cam1pnts, cv::Mat & finalpoints);
-
-	virtual void visualize(bool* keep_on);
+	void triangulateCore(cv::Mat & cam0pnts, cv::Mat & cam1pnts, cv::Mat & finalpoints);
 
 	void parseIntrinsicMatrix(const std::string path = "../settings/SN1499.conf");
 
 	virtual cv::Mat triangulate();
+
+	virtual void visualize(bool* keep_on);
 
 	virtual void process(const cv::Mat & image);
 
@@ -81,9 +81,19 @@ struct PoseExtractorFromFile : StereoPoseExtractor {
 
 	PoseExtractorFromFile(int argc, char **argv, const std::string resolution, const std::string path) 
                                               : StereoPoseExtractor(argc,argv,resolution), filepath_(path), file_(path)
-    {
-    	getline(file_,line_);
-    	getline(file_,line_);
+    {	
+
+
+    	if(file_.is_open())
+    	{
+    		getline(file_,line_);
+    		getline(file_,line_);
+    	}
+    	else
+    	{
+    		std::cout << "Could not open keypoints file!" << std::endl;
+    		exit(-1);
+    	}	
     }
                                         
 	virtual void process(const cv::Mat & image);

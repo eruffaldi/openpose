@@ -57,51 +57,6 @@ void splitVertically(const cv::Mat & input, cv::Mat & outputleft, cv::Mat & outp
     
 }
 
-/* Format string in CSV format 
- *
- */
-std::vector<std::string> CSVTokenize(std::string kpl_str)
-{
-  kpl_str.erase(0, kpl_str.find("\n") + 1);
-  std::replace(kpl_str.begin(), kpl_str.end(), '\n', ' ');
-
-  std::vector<std::string> vec;
-  std::istringstream iss(kpl_str);
-  copy(std::istream_iterator<std::string>(iss),std::istream_iterator<std::string>(),back_inserter(vec));
-
-  return vec;
-}
-
-void emitCSV(std::ofstream & outputfile, std::string & kp_str, const op::Array<float> & poseKeypoints, int camera, int cur_frame)
-{ 
-   std::vector<std::string> tokens = CSVTokenize(kp_str);
-
-   std::cout << "number of strings " << tokens.size() << std::endl;
-
-   //if no person detected, output 54 zeros
-   if (tokens.size() == 0)
-   {
-     outputfile << camera << " " << cur_frame << " " << 0 << " ";
-     for (int j = 0; j < 54; j++)
-     {
-       outputfile << 0.000 << " ";
-     }
-
-     outputfile << '\n';
-   }
-
-  for (int i = 0; i < poseKeypoints.getVolume(); i += 54)
-   {
-     outputfile << camera << " " << cur_frame << " " << i/54 << " ";
-     for (int j = 0; j < 54; j++)
-     {
-       outputfile << tokens[i+j] << " ";
-     }
-
-     outputfile << '\n';
-   }  
-}
-
 void filterVisible(const cv::Mat & pntsL, const cv::Mat & pntsR, cv::Mat & nzL, cv::Mat & nzR)
 { 
   cv::Vec2d pl;
@@ -135,7 +90,7 @@ void filterVisible(const cv::Mat & pntsL, const cv::Mat & pntsR, cv::Mat & nzL, 
   }
 }
 
-void StereoPoseExtractor::triangulateTrue(cv::Mat & cam0pnts, cv::Mat & cam1pnts, cv::Mat & finalpoints)
+void StereoPoseExtractor::triangulateCore(cv::Mat & cam0pnts, cv::Mat & cam1pnts, cv::Mat & finalpoints)
 {
   int N = 0;
   cv::Mat nz_cam0pnts;
@@ -219,6 +174,7 @@ StereoPoseExtractor::StereoPoseExtractor(int argc, char **argv, const std::strin
 
   if (FLAGS_write_video != "")
   { 
+    //TODO: parse resolution from instance fields
     cv::Size S = cv::Size(2560, 720);
     outputVideo_.open(FLAGS_write_video, CV_FOURCC('M','J','P','G'), 7, S, true);
     if (!outputVideo_.isOpened())
@@ -338,33 +294,6 @@ void StereoPoseExtractor::process(const cv::Mat & image)
   }
 }
 
-/*
-*TODO: check implementation on openpose library. There exists for sure.
-*/
-void fill2DMatrix(const op::Array<float> & keypoints, cv::Mat & campnts)
-{
-
-  double x = 0.0;
-  double y = 0.0;
-
-  //Ugliest AND SLOWEST
-  std::vector<std::string> spoints = CSVTokenize(keypoints.toString());
-
-  int people = keypoints.getVolume()/54;
-
-  campnts = cv::Mat(1,people*18,CV_64FC2);
-
-  for (int i = 0; i < 54 * people; i += 3)
-  {
-    x = atof(spoints[i].c_str());
-    y = atof(spoints[i+1].c_str());
-    cv::Vec2d elem(x,y);
-    campnts.at<cv::Vec2d>(0,i/3) = elem;
-  }
-}
-
-
-
 cv::Mat StereoPoseExtractor::triangulate()
 {
 
@@ -380,10 +309,10 @@ cv::Mat StereoPoseExtractor::triangulate()
   }
 
 
-  fill2DMatrix(poseKeypointsL_, cam0pnts);
-  fill2DMatrix(poseKeypointsR_, cam1pnts);
+  opArray2Mat(poseKeypointsL_, cam0pnts);
+  opArray2Mat(poseKeypointsR_, cam1pnts);
 
-  triangulateTrue(cam0pnts, cam1pnts, finalpoints);
+  triangulateCore(cam0pnts, cam1pnts, finalpoints);
 
   return finalpoints;
 
@@ -406,15 +335,18 @@ void StereoPoseExtractor::visualize(bool * keep_on)
 }
 
 void StereoPoseExtractor::verify(const cv::Mat & pnts, bool* keep_on)
-{
+{ 
+
+  if(pnts.empty())
+  {
+    return;
+  }
   
   std::vector<cv::Point2d> points2D(pnts.cols); 
 
   cv::projectPoints(pnts,cv::Mat::eye(3,3,CV_64FC1),cv::Vec3d(0,0,0),cam_.intrinsics_left_,cam_.dist_left_,points2D);
 
   int inside = 0;
-
-  std::cout << "number of points: " << pnts.cols << std::endl; 
 
   for (unsigned int i = 0; i < pnts.cols; i++)
   {
@@ -424,9 +356,6 @@ void StereoPoseExtractor::verify(const cv::Mat & pnts, bool* keep_on)
       inside ++;
     }
   } 
-
-  std::cout << "points inside " << inside << std::endl;
-
   //TODO: write circles in projected points
   cv::Mat verification = imageleft_.clone();
   for (auto & c : points2D)
@@ -437,6 +366,7 @@ void StereoPoseExtractor::verify(const cv::Mat & pnts, bool* keep_on)
 
   cv::namedWindow("Verification", CV_WINDOW_AUTOSIZE);
   cv::imshow("Verification", verification);
+  
   int k = cvWaitKey(0);
   if (k == 27)
   {
@@ -483,9 +413,13 @@ void fillPointsFromFile(const std::vector<std::string> & line, std::vector<cv::P
 }
 
 void PoseExtractorFromFile::process(const cv::Mat & image)
-{
+{ 
 
   cur_frame_ ++;
+
+  splitVertically(image, imageleft_, imageright_);
+
+  std::cout << "processing frame " << cur_frame_ << std::endl;
 
   std::vector<std::vector<std::string>> frametokens;
 
@@ -505,6 +439,12 @@ void PoseExtractorFromFile::process(const cv::Mat & image)
       fillPointsFromFile(s,points_right_);
     }
   }
+
+  std::cout << "points left " << std::endl;
+  std::cout << points_left_ << std::endl;
+
+  std::cout << "points right " << std::endl;
+  std::cout << points_right_ << std::endl;
 }
 
 void PoseExtractorFromFile::visualize(bool * keep_on)
@@ -537,18 +477,6 @@ void PoseExtractorFromFile::visualize(bool * keep_on)
   }
 }
 
-void vector2Mat(const std::vector<cv::Point2d> & points, cv::Mat & pmat)
-{
-
-  pmat = cv::Mat(1,points.size(),CV_64FC2);
-
-  for (int i = 0; i < points.size(); i++)
-  {
-    pmat.at<cv::Point2d>(0,i) = points[i];
-  }
-
-}
-
 cv::Mat PoseExtractorFromFile::triangulate()
 {
 
@@ -568,7 +496,7 @@ cv::Mat PoseExtractorFromFile::triangulate()
   vector2Mat(points_left_, cam0pnts);
   vector2Mat(points_right_, cam1pnts);
 
-  triangulateTrue(cam0pnts, cam1pnts, finalpoints);
+  triangulateCore(cam0pnts, cam1pnts, finalpoints);
 
   return finalpoints;
 
