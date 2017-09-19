@@ -294,6 +294,12 @@ void StereoPoseExtractor::process(const cv::Mat & image)
   }
 }
 
+void StereoPoseExtractor::getPoints(cv::Mat & outputL, cv::Mat & outputR)
+{
+  opArray2Mat(poseKeypointsL_, outputL);
+  opArray2Mat(poseKeypointsR_, outputR);
+}
+
 cv::Mat StereoPoseExtractor::triangulate()
 {
 
@@ -378,6 +384,18 @@ void StereoPoseExtractor::verify(const cv::Mat & pnts, bool* keep_on)
   }
 }
 
+double StereoPoseExtractor::getRMS(const cv::Mat & pnts3D)
+{ 
+
+  cv::Mat cam0pnts,cam1pnts;
+  cv::Mat points2D; 
+
+  cv::projectPoints(pnts3D,cv::Mat::eye(3,3,CV_64FC1),cv::Vec3d(0,0,0),cam_.intrinsics_left_,cam_.dist_left_,points2D);
+  getPoints(cam0pnts,cam1pnts);
+
+  return cv::norm(points2D - cam0pnts);
+}
+
 /*
 * Fill vector lines with the file rows relative to current frame
 */
@@ -419,8 +437,6 @@ void PoseExtractorFromFile::process(const cv::Mat & image)
 
   splitVertically(image, imageleft_, imageright_);
 
-  std::cout << "processing frame " << cur_frame_ << std::endl;
-
   std::vector<std::vector<std::string>> frametokens;
 
   points_left_.clear();
@@ -439,12 +455,6 @@ void PoseExtractorFromFile::process(const cv::Mat & image)
       fillPointsFromFile(s,points_right_);
     }
   }
-
-  std::cout << "points left " << std::endl;
-  std::cout << points_left_ << std::endl;
-
-  std::cout << "points right " << std::endl;
-  std::cout << points_right_ << std::endl;
 }
 
 void PoseExtractorFromFile::visualize(bool * keep_on)
@@ -498,6 +508,16 @@ cv::Mat PoseExtractorFromFile::triangulate()
 
   triangulateCore(cam0pnts, cam1pnts, finalpoints);
 
-  return finalpoints;
+  if( FLAGS_visualize)
+  {
+    visualize(&keep_on);
+  }
 
+  return finalpoints;
+}
+
+void PoseExtractorFromFile::getPoints(cv::Mat & outputL, cv::Mat & outputR)
+{
+  vector2Mat(points_left_, outputL);
+  vector2Mat(points_right_, outputR);
 }

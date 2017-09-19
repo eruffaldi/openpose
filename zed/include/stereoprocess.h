@@ -43,6 +43,8 @@ struct StereoPoseExtractor {
 
 	void parseIntrinsicMatrix(const std::string path = "../settings/SN1499.conf");
 
+	virtual void getPoints(cv::Mat &, cv::Mat &);
+
 	virtual cv::Mat triangulate();
 
 	virtual void visualize(bool* keep_on);
@@ -50,6 +52,8 @@ struct StereoPoseExtractor {
 	virtual void process(const cv::Mat & image);
 
 	virtual void verify(const cv::Mat & pnts, bool* keep_on);
+
+	virtual double getRMS(const cv::Mat & pnts3D);
 
 
 	op::CvMatToOpInput *cvMatToOpInput_;
@@ -103,6 +107,8 @@ struct PoseExtractorFromFile : StereoPoseExtractor {
 	virtual void visualize(bool * keep_on);
 
 	virtual cv::Mat triangulate();
+
+	virtual void getPoints(cv::Mat & outputL, cv::Mat & outputR);
 
 	const std::string filepath_;
 	std::ifstream file_;

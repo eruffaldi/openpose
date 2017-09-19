@@ -28,7 +28,7 @@ DEFINE_string(video,                    "../data/example/video.avi",            
 
 DEFINE_bool(verify,                     false,                                   "Show projection of triangulated points"); 
 
-DEFINE_string(file,                     "../data/example/keypoints.csv",                 "Full path of the CSV file with 2D points");                 
+DEFINE_string(file,                     "../data/example/keypoints.csv",          "Full path of the CSV file with 2D points");                 
 
 bool keep_on = true;
 
@@ -67,12 +67,11 @@ int main(int argc, char **argv) {
 
     cv::Mat pnts = stereoextractor.triangulate();
 
-    stereoextractor.verify(pnts, &keep_on);
-
-    //stereoextractor->visualize(&keep_on);
+    if(FLAGS_verify)
+    {
+      stereoextractor.verify(pnts, &keep_on);
+    }
   }
-
-  
 
   stereoextractor.destroy();
 
