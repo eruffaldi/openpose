@@ -45,7 +45,7 @@ struct StereoPoseExtractor {
 
 	virtual void getPoints(cv::Mat &, cv::Mat &);
 
-	virtual cv::Mat triangulate();
+	virtual double triangulate(cv::Mat &);
 
 	virtual void visualize(bool* keep_on);
 
@@ -54,6 +54,8 @@ struct StereoPoseExtractor {
 	virtual void verify(const cv::Mat & pnts, bool* keep_on);
 
 	virtual double getRMS(const cv::Mat & pnts3D);
+
+	virtual double go(const cv::Mat & image, const bool verify, cv::Mat &, bool* keep_on);
 
 
 	op::CvMatToOpInput *cvMatToOpInput_;
@@ -105,8 +107,6 @@ struct PoseExtractorFromFile : StereoPoseExtractor {
 	void getNextBlock(std::vector<std::vector<std::string>> & lines);
 
 	virtual void visualize(bool * keep_on);
-
-	virtual cv::Mat triangulate();
 
 	virtual void getPoints(cv::Mat & outputL, cv::Mat & outputR);
 

@@ -71,7 +71,6 @@ void vector2Mat(const std::vector<cv::Point2d> & points, cv::Mat & pmat)
   {
     pmat.at<cv::Point2d>(0,i) = points[i];
   }
-
 }
 
 /*

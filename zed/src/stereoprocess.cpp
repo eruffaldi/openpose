@@ -300,27 +300,22 @@ void StereoPoseExtractor::getPoints(cv::Mat & outputL, cv::Mat & outputR)
   opArray2Mat(poseKeypointsR_, outputR);
 }
 
-cv::Mat StereoPoseExtractor::triangulate()
+/*
+*   
+*/
+double StereoPoseExtractor::triangulate(cv::Mat & finalpoints)
 {
 
   //I can take all the points negleting if they belong to a specific person 
   //how can I know if the points belong to the same person? 
   cv::Mat cam0pnts;
   cv::Mat cam1pnts;
-  cv::Mat finalpoints;
 
-  if (poseKeypointsL_.empty() || poseKeypointsR_.empty())
-  {
-    return cv::Mat();
-  }
-
-
-  opArray2Mat(poseKeypointsL_, cam0pnts);
-  opArray2Mat(poseKeypointsR_, cam1pnts);
+  getPoints(cam0pnts,cam1pnts);
 
   triangulateCore(cam0pnts, cam1pnts, finalpoints);
 
-  return finalpoints;
+  return getRMS(finalpoints);
 
 }
 
@@ -394,6 +389,18 @@ double StereoPoseExtractor::getRMS(const cv::Mat & pnts3D)
   getPoints(cam0pnts,cam1pnts);
 
   return cv::norm(points2D - cam0pnts);
+}
+
+double StereoPoseExtractor::go(const cv::Mat & image, const bool ver, cv::Mat & points3D, bool* keep_on)
+{ 
+
+  process(image);
+  double error = triangulate(points3D);
+
+  if(ver)
+  {
+    verify(points3D, keep_on);
+  }
 }
 
 /*
@@ -487,34 +494,6 @@ void PoseExtractorFromFile::visualize(bool * keep_on)
   }
 }
 
-cv::Mat PoseExtractorFromFile::triangulate()
-{
-
-  //I can take all the points negleting if they belong to a specific person 
-  //how can I know if the points belong to the same person? 
-  cv::Mat cam0pnts;
-  cv::Mat cam1pnts;
-  cv::Mat finalpoints;
-
-
-  if (points_left_.empty() || points_right_.empty())
-  {
-    return cv::Mat();
-  }
-
-
-  vector2Mat(points_left_, cam0pnts);
-  vector2Mat(points_right_, cam1pnts);
-
-  triangulateCore(cam0pnts, cam1pnts, finalpoints);
-
-  if( FLAGS_visualize)
-  {
-    visualize(&keep_on);
-  }
-
-  return finalpoints;
-}
 
 void PoseExtractorFromFile::getPoints(cv::Mat & outputL, cv::Mat & outputR)
 {

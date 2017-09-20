@@ -57,20 +57,16 @@ int main(int argc, char **argv) {
   stereoextractor.init();
 
   cv::Mat image;
+  double error = 0.0;
 
   while(keep_on)
   {
 
+    cv::Mat pnts3D;
     cap >> image;
 
-    stereoextractor.process(image);
+    double error = stereoextractor.go(image,FLAGS_verify,pnts3D,&keep_on);
 
-    cv::Mat pnts = stereoextractor.triangulate();
-
-    if(FLAGS_verify)
-    {
-      stereoextractor.verify(pnts, &keep_on);
-    }
   }
 
   stereoextractor.destroy();

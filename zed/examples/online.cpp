@@ -33,7 +33,8 @@ DEFINE_int32(fps,                       60,              "Camera capture speed. 
 
 DEFINE_bool(verify,                     false,            "Show projection of triangulated points"); 
 
-DEFINE_string(file,                     "",               "Get triangulated points from a CSV file with 2D points");                 
+DEFINE_string(file,                     "",               "Get triangulated points from a CSV file with 2D points");    
+
 
 StereoPoseExtractor * stereoextractor;
 bool keep_on = true;
@@ -71,18 +72,10 @@ void cb(uvc_frame_t *frame, void *ptr) {
      
   cvSetData(cvImg, bgr->data, bgr->width * 3); 
 
+  cv::Mat pnts;
   cv::Mat image = cv::cvarrToMat(cvImg);
 
-  stereoextractor->process(image);
-
-  cv::Mat pnts = stereoextractor->triangulate();
-
-  // ------------------------- SHOWING RESULT -------------------------
-
-  if( FLAGS_verify )
-  {
-  stereoextractor->verify(pnts,&keep_on);
-  }
+  double error = stereoextractor->go(image,FLAGS_verify,pnts,&keep_on);
    
   cvReleaseImageHeader(&cvImg);
    
@@ -218,12 +211,10 @@ int main(int argc, char **argv) {
     while(keep_on)
     {
 
-      cv::Mat image;
+      cv::Mat image,pnts;
       cap >> image;
 
-      stereoextractor->process(image);
-
-      cv::Mat pnts = stereoextractor->triangulate();
+      double error = stereoextractor->go(image,FLAGS_verify,pnts,&keep_on);
 
       //stereoextractor->visualize(&keep_on);
     }
