@@ -76,6 +76,7 @@ void cb(uvc_frame_t *frame, void *ptr) {
   cv::Mat image = cv::cvarrToMat(cvImg);
 
   double error = stereoextractor->go(image,FLAGS_verify,pnts,&keep_on);
+  std::cout << "error " << error << std::endl;
    
   cvReleaseImageHeader(&cvImg);
    

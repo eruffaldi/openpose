@@ -2,6 +2,7 @@
 #include "opencv2/cudastereo.hpp"
 #include <opencv2/core/cuda.hpp>
 #include <opencv2/cudaimgproc.hpp>
+#include <math.h>
 
 
 // See all the available parameter options withe the `--help` flag. E.g. `./build/examples/openpose/openpose.bin --help`.
@@ -60,6 +61,32 @@ void splitVertically(const cv::Mat & input, cv::Mat & outputleft, cv::Mat & outp
     
 }
 
+void filterVisible(const cv::Mat & pntsL, cv::Mat & nzL)
+{
+  cv::Vec2d pl;
+  cv::Vec2d zerov(0.0,0.0);
+
+  std::vector<cv::Vec2d> pntsl;
+
+  for (int i = 0; i < pntsL.cols; i++)
+  {
+    pl = pntsL.at<cv::Vec2d>(0,i);
+
+    if (pl != zerov)
+    {
+      pntsl.push_back(pl);
+    }
+
+  }
+
+  nzL = cv::Mat(1,pntsl.size(),CV_64FC2);
+
+  for (int i = 0; i < pntsl.size(); i++)
+  {
+    nzL.at<cv::Vec2d>(0,i) = pntsl[i];
+  }
+}
+
 void filterVisible(const cv::Mat & pntsL, const cv::Mat & pntsR, cv::Mat & nzL, cv::Mat & nzR)
 { 
   cv::Vec2d pl;
@@ -93,15 +120,180 @@ void filterVisible(const cv::Mat & pntsL, const cv::Mat & pntsR, cv::Mat & nzL, 
   }
 }
 
+void pts2VecofBodies(const cv::Mat & pts1, std::vector<cv::Mat> & bodies_left)
+{
+  for(int i=0; i < pts1.cols/18; i++)
+  {
+    cv::Mat pleft(1,18,CV_64FC2);
+
+    for (int j=0; j<18; j++)
+    {
+      pleft.at<cv::Vec2d>(0,j) = pts1.at<cv::Vec2d>(0,(18*i)+j);
+    }
+
+    bodies_left.push_back(pleft);
+  }
+}
+
+cv::Vec2d getMedian(const cv::Mat & body)
+{
+
+  double x,y = 0.0;
+  double count = 0.0;
+
+  for(int i = 0; i < body.cols; i++)
+  {
+    cv::Vec2d v = body.at<cv::Vec2d>(0,i);
+    x = x + v[0];
+    y = y + v[1];
+
+    if (v[0] != 0.0 || v[1] != 0.0)
+    {
+      count++;
+    }
+
+  } 
+
+  x = x / count;
+  y = y / count;
+
+  return cv::Vec2d(x,y);
+}
+
+int closestCentroidC(const cv::Vec2d & c, const std::vector<cv::Vec2d> & v)
+{
+
+  int minind = 0;
+  double mindist = 999999999.9;
+  int ind = -1;
+
+  for (auto & a : v)
+  {
+    ind ++;
+    double dist = std::sqrt(std::pow(c[0] - a[0], 2) + std::pow(c[1] - a[1], 2));
+
+    if(dist < mindist)
+    {
+      mindist = dist;
+      minind = ind;
+    }
+  }
+
+  return minind;
+}
+
+
+int closestCentroidM(const cv::Vec2d & c, const std::vector<cv::Mat> & v)
+{
+
+  std::vector<cv::Vec2d> vc;
+
+  for (auto & a : v)
+  {
+    vc.push_back(getMedian(a));
+  }
+
+  return closestCentroidC(c,vc);
+}
+
+void equalize(const cv::Mat & pts1, const cv::Mat & pts2, cv::Mat & outl, cv::Mat & outr)
+{
+
+  //TODO: divide the points in bodies -> every 18 points one body, get the center of each body
+  std::vector<cv::Mat> bodies_left;
+  std::vector<cv::Mat> bodies_right;
+
+  std::vector<cv::Vec2d> centroids_left;
+  std::vector<cv::Vec2d> centroids_right;
+
+  std::vector<int> mininds;
+
+  bool minatleft = true;
+
+  pts2VecofBodies(pts1, bodies_left);
+  pts2VecofBodies(pts2, bodies_right);
+
+  for (auto & b : bodies_left)
+  {
+    centroids_left.push_back(getMedian(b));
+  }
+
+  for (auto & b : bodies_right)
+  {
+    centroids_right.push_back(getMedian(b));
+  }
+
+  std::vector<cv::Mat> * minbodies;
+  std::vector<cv::Mat> * maxbodies;
+
+  if(bodies_left.size() < bodies_right.size())
+  {
+    minbodies = &(bodies_left);
+    maxbodies = &(bodies_right);
+  }
+  else
+  {
+    minatleft = false;
+    minbodies = &(bodies_right);
+    maxbodies = &(bodies_left);
+  }
+
+  for(auto & c : *minbodies)
+  {
+    //TODO:find the index of the closest element to c in maxbodies 
+    std::vector<cv::Mat> topass = *maxbodies;
+    std::vector<cv::Vec2d> vc;
+    cv::Vec2d d = getMedian(c);
+
+    for (auto & a : topass)
+    {
+      vc.push_back(getMedian(a));
+    }
+
+    int curmin = closestCentroidC(d,vc);
+    mininds.push_back(curmin);
+  }
+
+  int outsize = minbodies->size();
+
+  cv::Mat out1 = cv::Mat(1,outsize*18, CV_64FC2);
+  cv::Mat out2 = cv::Mat(1,outsize*18, CV_64FC2);
+
+  for (int i = 0; i < outsize; i++)
+  {
+
+    for(int j = 0; j < 18; j++)
+    {
+      out1.at<cv::Vec2d>(0,(18*i)+j) = minbodies->at(i).at<cv::Vec2d>(0,j);
+      out2.at<cv::Vec2d>(0,(18*i)+j) = maxbodies->at(mininds[i]).at<cv::Vec2d>(0,j);
+    }
+
+  }
+
+  if(minatleft)
+  {
+    outl = out1;
+    outr = out2;
+  }
+  else
+  {
+    outl = out2;
+    outr = out1;
+  }
+}
+
 void StereoPoseExtractor::triangulateCore(cv::Mat & cam0pnts, cv::Mat & cam1pnts, cv::Mat & finalpoints)
 {
   int N = 0;
   cv::Mat nz_cam0pnts;
   cv::Mat nz_cam1pnts;
   //TODO: check the numeber of detected people is the same, otherwise PROBLEM
+
   if(cam0pnts.cols != cam1pnts.cols)
   {
     std::cout << "number of detectd people differ" << std::endl;
+    //TODO: routine to take only the bounding boxes of the same people 
+    equalize(cam0pnts, cam1pnts, cam0pnts, cam1pnts);
     return;
   }
 
@@ -228,13 +420,16 @@ void StereoPoseExtractor::destroy()
   outputfile_.close();
 }
 
-void StereoPoseExtractor::process(const cv::Mat & image)
+void StereoPoseExtractor::extract(const cv::Mat & image)
 {
 
   cur_frame_ ++;
-
-  //Split image  vertically into 2 even parts
   splitVertically(image, imageleft_, imageright_);
+
+}
+
+void StereoPoseExtractor::process()
+{
 
   op::Array<float> netInputArrayL;
   op::Array<float> netInputArrayR;
@@ -365,7 +560,7 @@ void StereoPoseExtractor::verify(const cv::Mat & pnts, bool* keep_on)
   cv::namedWindow("Verification", CV_WINDOW_AUTOSIZE);
   cv::imshow("Verification", verification);
   
-  int k = cvWaitKey(0);
+  int k = cvWaitKey(2);
   if (k == 27)
   {
       *keep_on = false;
@@ -378,6 +573,11 @@ void StereoPoseExtractor::verify(const cv::Mat & pnts, bool* keep_on)
 
 double StereoPoseExtractor::getRMS(const cv::Mat & pnts3D)
 { 
+
+  if(pnts3D.empty())
+  {
+    return 0.0;
+  }
 
   cv::Mat cam0pnts,cam1pnts;
   cv::Mat points2D; 
@@ -394,7 +594,9 @@ double StereoPoseExtractor::getRMS(const cv::Mat & pnts3D)
 double StereoPoseExtractor::go(const cv::Mat & image, const bool ver, cv::Mat & points3D, bool* keep_on)
 { 
 
-  process(image);
+  extract(image);
+
+  process();
  
   double error = triangulate(points3D);
 
@@ -532,7 +734,7 @@ void DisparityExtractor::verify(const cv::Mat & pnts, bool* keep_on)
   cv::namedWindow("Verification", CV_WINDOW_AUTOSIZE);
   cv::imshow("Verification", disp);
   
-  int k = cvWaitKey(0);
+  int k = cvWaitKey(2);
   if (k == 27)
   {
       *keep_on = false;
@@ -543,4 +745,21 @@ void DisparityExtractor::verify(const cv::Mat & pnts, bool* keep_on)
 
     cv:imwrite(filename.c_str(), disp);
   }
+}
+
+double DisparityExtractor::go(const cv::Mat & image, const bool ver, cv::Mat & points3D, bool* keep_on)
+{ 
+
+  extract(image);
+
+  //process(image);
+ 
+  double error = triangulate(points3D);
+
+  if(ver)
+  {
+    verify(points3D, keep_on);
+  }
+
+  return error;
 }

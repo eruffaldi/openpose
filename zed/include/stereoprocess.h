@@ -49,7 +49,9 @@ struct StereoPoseExtractor {
 
 	virtual void visualize(bool* keep_on);
 
-	virtual void process(const cv::Mat & image);
+	virtual void process();
+
+	virtual void extract(const cv::Mat &);
 
 	virtual void verify(const cv::Mat & pnts, bool* keep_on);
 
@@ -92,6 +94,8 @@ struct DisparityExtractor : StereoPoseExtractor {
 	virtual double triangulate(cv::Mat & output); 
 
 	virtual void verify(const cv::Mat & pnts, bool* keep_on);
+
+	virtual double go(const cv::Mat & image, const bool verify, cv::Mat &, bool* keep_on);
 
 	cv::cuda::GpuMat disparity_;
 	cv::cuda::GpuMat gpuleft_,gpuright_;
