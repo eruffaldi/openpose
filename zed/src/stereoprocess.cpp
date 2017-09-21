@@ -1,4 +1,7 @@
 #include "stereoprocess.h"
+#include "opencv2/cudastereo.hpp"
+#include <opencv2/core/cuda.hpp>
+#include <opencv2/cudaimgproc.hpp>
 
 
 // See all the available parameter options withe the `--help` flag. E.g. `./build/examples/openpose/openpose.bin --help`.
@@ -145,13 +148,6 @@ void StereoPoseExtractor::triangulateCore(cv::Mat & cam0pnts, cv::Mat & cam1pnts
 
   proj_right = cam_.intrinsics_left_ * rototran;
 
-  std::cout << "projection left " << std::endl;
-  std::cout << proj_left << std::endl;
-  std::cout << "projection right"  << std::endl;
-  std::cout << proj_right << std::endl;
-
-  //exit(-1);
-
   cv::triangulatePoints(proj_left, proj_right, cam0pnts_undist, cam1pnts_undist, pnts3d);
 
   finalpoints = cv::Mat(1,N,CV_64FC3);
@@ -175,7 +171,7 @@ StereoPoseExtractor::StereoPoseExtractor(int argc, char **argv, const std::strin
   if (FLAGS_write_video != "")
   { 
     //TODO: parse resolution from instance fields
-    cv::Size S = cv::Size(2560, 720);
+    cv::Size S = cv::Size(cam_.width_*2, cam_.height_);
     outputVideo_.open(FLAGS_write_video, CV_FOURCC('M','J','P','G'), 7, S, true);
     if (!outputVideo_.isOpened())
     {
@@ -335,6 +331,7 @@ void StereoPoseExtractor::visualize(bool * keep_on)
   }
 }
 
+
 void StereoPoseExtractor::verify(const cv::Mat & pnts, bool* keep_on)
 { 
 
@@ -388,6 +385,9 @@ double StereoPoseExtractor::getRMS(const cv::Mat & pnts3D)
   cv::projectPoints(pnts3D,cv::Mat::eye(3,3,CV_64FC1),cv::Vec3d(0,0,0),cam_.intrinsics_left_,cam_.dist_left_,points2D);
   getPoints(cam0pnts,cam1pnts);
 
+  filterVisible(cam0pnts,cam1pnts,cam0pnts,cam1pnts);
+  cv::transpose(points2D,points2D);
+
   return cv::norm(points2D - cam0pnts);
 }
 
@@ -395,12 +395,15 @@ double StereoPoseExtractor::go(const cv::Mat & image, const bool ver, cv::Mat & 
 { 
 
   process(image);
+ 
   double error = triangulate(points3D);
 
   if(ver)
   {
     verify(points3D, keep_on);
   }
+
+  return error;
 }
 
 /*
@@ -499,4 +502,45 @@ void PoseExtractorFromFile::getPoints(cv::Mat & outputL, cv::Mat & outputR)
 {
   vector2Mat(points_left_, outputL);
   vector2Mat(points_right_, outputR);
+}
+
+void DisparityExtractor::getDisparity()
+{ 
+  cv::Mat grayleft,grayright;
+
+  cv::cvtColor(imageleft_,grayleft, CV_BGR2GRAY);
+  cv::cvtColor(imageright_,grayright, CV_BGR2GRAY);
+
+  gpuleft_.upload(grayleft);
+  gpuright_.upload(grayright);
+
+  disparter_->compute(gpuleft_,gpuright_,disparity_);
+}
+
+double DisparityExtractor::triangulate(cv::Mat & output) 
+{
+  getDisparity();
+  return 0.0;
+}
+
+void DisparityExtractor::verify(const cv::Mat & pnts, bool* keep_on)
+{
+  
+  cv::Mat disp;
+  disparity_.download(disp);  
+
+  cv::namedWindow("Verification", CV_WINDOW_AUTOSIZE);
+  cv::imshow("Verification", disp);
+  
+  int k = cvWaitKey(0);
+  if (k == 27)
+  {
+      *keep_on = false;
+  }
+  if (k == 's')
+  {
+    std::string filename = "../data/disparity_" + std::to_string(cur_frame_) + ".jpg";
+
+    cv:imwrite(filename.c_str(), disp);
+  }
 }

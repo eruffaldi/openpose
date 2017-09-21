@@ -83,6 +83,23 @@ struct StereoPoseExtractor {
 	StereoCamera cam_;
 };
 
+struct DisparityExtractor : StereoPoseExtractor {
+
+	DisparityExtractor(int argc, char **argv, const std::string resolution) : StereoPoseExtractor(argc,argv,resolution){}
+
+	void getDisparity();
+
+	virtual double triangulate(cv::Mat & output); 
+
+	virtual void verify(const cv::Mat & pnts, bool* keep_on);
+
+	cv::cuda::GpuMat disparity_;
+	cv::cuda::GpuMat gpuleft_,gpuright_;
+
+	cv::Ptr<cv::cuda::StereoBM> disparter_ = cv::cuda::createStereoBM();
+
+};
+
 struct PoseExtractorFromFile : StereoPoseExtractor {
 
 	PoseExtractorFromFile(int argc, char **argv, const std::string resolution, const std::string path) 
@@ -104,11 +121,11 @@ struct PoseExtractorFromFile : StereoPoseExtractor {
                                         
 	virtual void process(const cv::Mat & image);
 
-	void getNextBlock(std::vector<std::vector<std::string>> & lines);
-
 	virtual void visualize(bool * keep_on);
 
 	virtual void getPoints(cv::Mat & outputL, cv::Mat & outputR);
+
+	void getNextBlock(std::vector<std::vector<std::string>> & lines);
 
 	const std::string filepath_;
 	std::ifstream file_;

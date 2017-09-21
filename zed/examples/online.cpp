@@ -33,7 +33,7 @@ DEFINE_int32(fps,                       60,              "Camera capture speed. 
 
 DEFINE_bool(verify,                     false,            "Show projection of triangulated points"); 
 
-DEFINE_string(file,                     "",               "Get triangulated points from a CSV file with 2D points");    
+DEFINE_bool(disparity,                  false,            "Use disparity map instead of triangulation to get 3D body points");    
 
 
 StereoPoseExtractor * stereoextractor;
@@ -88,13 +88,13 @@ int main(int argc, char **argv) {
   // Parsing command line flags
   gflags::ParseCommandLineFlags(&argc, &argv, true);
 
-  if(FLAGS_file == "")
+  if(FLAGS_disparity == false)
   {
     stereoextractor = new StereoPoseExtractor(argc, argv, FLAGS_resolution);
   }
   else
   {
-    stereoextractor = new PoseExtractorFromFile(argc, argv, FLAGS_resolution, FLAGS_file);
+    stereoextractor = new DisparityExtractor(argc, argv, FLAGS_resolution);
   }
 
   if( FLAGS_video == "" )
