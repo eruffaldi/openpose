@@ -289,12 +289,18 @@ void StereoPoseExtractor::triangulateCore(cv::Mat & cam0pnts, cv::Mat & cam1pnts
   cv::Mat nz_cam1pnts;
   //TODO: check the numeber of detected people is the same, otherwise PROBLEM
 
+  if (cam0pnts.cols == 0 || cam1pnts.cols == 0)
+  {
+    std::cout << "One Image did not get points " << std::endl;
+    return;
+  }
+
   if(cam0pnts.cols != cam1pnts.cols)
   {
-    std::cout << "number of detectd people differ" << std::endl;
+    std::cout << "number of detectd people differs" << std::endl;
+    std::cout << cam0pnts.cols << " " << cam1pnts.cols << std::endl;
     //TODO: routine to take only the bounding boxes of the same people 
     equalize(cam0pnts, cam1pnts, cam0pnts, cam1pnts);
-    return;
   }
 
   N = nz_cam1pnts.cols;
@@ -305,6 +311,12 @@ void StereoPoseExtractor::triangulateCore(cv::Mat & cam0pnts, cv::Mat & cam1pnts
 
   //If zeros in at least one: remove both 
   filterVisible(cam0pnts, cam1pnts, cam0pnts, cam1pnts);
+
+  if(cam0pnts.cols == 0)
+  {
+    std::cout <<  "NO MATCHING POINTS FOUND!" << std::endl; 
+    return;
+  }
 
   N = cam0pnts.cols;
   cv::Mat pnts3d(1,N,CV_64FC4);
@@ -506,7 +518,7 @@ double StereoPoseExtractor::triangulate(cv::Mat & finalpoints)
 
   triangulateCore(cam0pnts, cam1pnts, finalpoints);
 
-  return getRMS(finalpoints);
+  return getRMS(cam0pnts,finalpoints);
 
 }
 
@@ -571,7 +583,7 @@ void StereoPoseExtractor::verify(const cv::Mat & pnts, bool* keep_on)
   }
 }
 
-double StereoPoseExtractor::getRMS(const cv::Mat & pnts3D)
+double StereoPoseExtractor::getRMS(const cv::Mat & cam0pnts, const cv::Mat & pnts3D)
 { 
 
   if(pnts3D.empty())
@@ -579,13 +591,10 @@ double StereoPoseExtractor::getRMS(const cv::Mat & pnts3D)
     return 0.0;
   }
 
-  cv::Mat cam0pnts,cam1pnts;
   cv::Mat points2D; 
-
+ 
   cv::projectPoints(pnts3D,cv::Mat::eye(3,3,CV_64FC1),cv::Vec3d(0,0,0),cam_.intrinsics_left_,cam_.dist_left_,points2D);
-  getPoints(cam0pnts,cam1pnts);
 
-  filterVisible(cam0pnts,cam1pnts,cam0pnts,cam1pnts);
   cv::transpose(points2D,points2D);
 
   return cv::norm(points2D - cam0pnts);
@@ -719,9 +728,84 @@ void DisparityExtractor::getDisparity()
   disparter_->compute(gpuleft_,gpuright_,disparity_);
 }
 
+/*
+* x: point coordinate in pixel
+* y: point coordinate in pixel
+* d: disparity at point (x,y)
+*/
+cv::Point3d DisparityExtractor::getPointFromDisp(double u, double v, double d)
+{
+
+  double f = cam_.intrinsics_left_.at<double>(0,0);
+  double cx = cam_.intrinsics_left_.at<double>(0,2);
+  double cy = cam_.intrinsics_left_.at<double>(1,2);
+  double fx = f;
+  double fy = f;
+  double B = cam_.ST_[0];
+
+  double x = (u - cx)/(fx*d) * (B*f);
+  double y = (v - cy)/(fy*d) * (B*f);
+  double z = (B*f)/d;
+
+  return cv::Point3d(x,y,z);
+}
+
+double DisparityExtractor::avgDisp(const cv::Mat & disp, int u, int v, int side)
+{
+
+  //TODO:check is not a border point
+  double wlb,wub;
+  double hlb,hub;
+
+  wlb = std::min(u,side);
+  hlb = std::min(v,side);
+
+  wub = std::min(cam_.width_ - u - 1, side);
+  hub = std::min(cam_.height_ - v - 1, side);
+
+  int count = 0;
+  double ret = 0.0;
+
+
+  for (int i = wlb; i < wub; i++)
+  {
+    for (int j = hlb; j < hub; j++)
+    {
+      ret = ret + disp.at<double>(i,j);
+      count ++;   
+    }
+  }
+
+  return ret/count;
+
+}
+
 double DisparityExtractor::triangulate(cv::Mat & output) 
 {
+
   getDisparity();
+
+  cv::Mat disp;
+  cv::Mat cam0pnts,cam1pnts;
+
+  disparity_.download(disp);  
+  getPoints(cam0pnts,cam1pnts);
+  filterVisible(cam0pnts,cam1pnts,cam0pnts,cam1pnts);
+
+  output = cv::Mat(1,cam0pnts.cols,CV_64FC3);
+
+  for(int i=0; i < cam0pnts.cols; i++)
+  {
+
+    //TODO: find he average value of disparity around the selected point
+
+    cv::Vec2d p = cam0pnts.at<cv::Vec2d>(0,i);
+    cv::Point3d p3 = getPointFromDisp(p[0],p[1],cvRound(avgDisp(disp,cvRound(p[0]),cvRound(p[1]))));
+
+    output.at<cv::Point3d>(0,i) = p3;
+  }
+
+
   return 0.0;
 }
 
@@ -731,10 +815,21 @@ void DisparityExtractor::verify(const cv::Mat & pnts, bool* keep_on)
   cv::Mat disp;
   disparity_.download(disp);  
 
+  //TODO: verify by drawing the 2D openpose points on the disparity image
+  cv::Mat cam0pnts,cam1pnts;
+  getPoints(cam0pnts,cam1pnts);
+
+  for (int i = 0; i < cam0pnts.cols; i++)
+  { 
+    cv::Point2d point = cam0pnts.at<cv::Point2d>(0,i);
+    cv::circle(disp,point,4,255,2);
+  }
+
+
   cv::namedWindow("Verification", CV_WINDOW_AUTOSIZE);
   cv::imshow("Verification", disp);
   
-  int k = cvWaitKey(2);
+  int k = cvWaitKey(10);
   if (k == 27)
   {
       *keep_on = false;
@@ -752,7 +847,7 @@ double DisparityExtractor::go(const cv::Mat & image, const bool ver, cv::Mat & p
 
   extract(image);
 
-  //process(image);
+  process();
  
   double error = triangulate(points3D);
 
@@ -761,5 +856,5 @@ double DisparityExtractor::go(const cv::Mat & image, const bool ver, cv::Mat & p
     verify(points3D, keep_on);
   }
 
-  return error;
+  return 0.0;
 }

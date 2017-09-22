@@ -55,7 +55,7 @@ struct StereoPoseExtractor {
 
 	virtual void verify(const cv::Mat & pnts, bool* keep_on);
 
-	virtual double getRMS(const cv::Mat & pnts3D);
+	virtual double getRMS(const cv::Mat &, const cv::Mat & pnts3D);
 
 	virtual double go(const cv::Mat & image, const bool verify, cv::Mat &, bool* keep_on);
 
@@ -90,6 +90,10 @@ struct DisparityExtractor : StereoPoseExtractor {
 	DisparityExtractor(int argc, char **argv, const std::string resolution) : StereoPoseExtractor(argc,argv,resolution){}
 
 	void getDisparity();
+
+	cv::Point3d getPointFromDisp(double u, double v, double d);
+
+	double avgDisp(const cv::Mat & disp, int u, int v, int side = 5);
 
 	virtual double triangulate(cv::Mat & output); 
 
