@@ -95,11 +95,11 @@ struct DisparityExtractor : StereoPoseExtractor {
 
 	double avgDisp(const cv::Mat & disp, int u, int v, int side = 5);
 
-	virtual double triangulate(cv::Mat & output); 
+	void verifyD(const cv::Mat & pnts, bool* keep_on);
 
 	virtual void verify(const cv::Mat & pnts, bool* keep_on);
 
-	virtual double go(const cv::Mat & image, const bool verify, cv::Mat &, bool* keep_on);
+	virtual double triangulate(cv::Mat & output); 
 
 	cv::cuda::GpuMat disparity_;
 	cv::cuda::GpuMat gpuleft_,gpuright_;

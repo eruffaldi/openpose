@@ -507,7 +507,7 @@ void StereoPoseExtractor::getPoints(cv::Mat & outputL, cv::Mat & outputR)
 *   
 */
 double StereoPoseExtractor::triangulate(cv::Mat & finalpoints)
-{
+{ 
 
   //I can take all the points negleting if they belong to a specific person 
   //how can I know if the points belong to the same person? 
@@ -547,7 +547,12 @@ void StereoPoseExtractor::verify(const cv::Mat & pnts, bool* keep_on)
     return;
   }
   
-  std::vector<cv::Point2d> points2D(pnts.cols); 
+  std::cout << "points to be projected " << std::endl;
+  std::cout << pnts << std::endl;
+  std::cout << "intrinsics " << std::endl;
+  std::cout << cam_.intrinsics_left_ << std::endl;
+
+  std::vector<cv::Point2d> points2D(pnts.cols);
 
   cv::projectPoints(pnts,cv::Mat::eye(3,3,CV_64FC1),cv::Vec3d(0,0,0),cam_.intrinsics_left_,cam_.dist_left_,points2D);
 
@@ -750,6 +755,29 @@ cv::Point3d DisparityExtractor::getPointFromDisp(double u, double v, double d)
   return cv::Point3d(x,y,z);
 }
 
+std::string type2str(int type) {
+  std::string r;
+
+  uchar depth = type & CV_MAT_DEPTH_MASK;
+  uchar chans = 1 + (type >> CV_CN_SHIFT);
+
+  switch ( depth ) {
+    case CV_8U:  r = "8U"; break;
+    case CV_8S:  r = "8S"; break;
+    case CV_16U: r = "16U"; break;
+    case CV_16S: r = "16S"; break;
+    case CV_32S: r = "32S"; break;
+    case CV_32F: r = "32F"; break;
+    case CV_64F: r = "64F"; break;
+    default:     r = "User"; break;
+  }
+
+  r += "C";
+  r += (chans+'0');
+
+  return r;
+}
+
 double DisparityExtractor::avgDisp(const cv::Mat & disp, int u, int v, int side)
 {
 
@@ -757,22 +785,25 @@ double DisparityExtractor::avgDisp(const cv::Mat & disp, int u, int v, int side)
   double wlb,wub;
   double hlb,hub;
 
-  wlb = std::min(u,side);
-  hlb = std::min(v,side);
+  wlb = std::max(0,u - side);
+  hlb = std::max(0,v - side);
 
-  wub = std::min(cam_.width_ - u - 1, side);
-  hub = std::min(cam_.height_ - v - 1, side);
+  wub = std::min(cam_.width_, u + side + 1);
+  hub = std::min(cam_.height_,v + side + 1);
 
-  int count = 0;
+  double count = 0.0;
   double ret = 0.0;
-
 
   for (int i = wlb; i < wub; i++)
   {
     for (int j = hlb; j < hub; j++)
-    {
-      ret = ret + disp.at<double>(i,j);
-      count ++;   
+    { 
+
+      ret = ret + (double)disp.at<uint8_t>(i,j);
+      if((double)disp.at<uint8_t>(i,j) > 0.0)
+      {
+        count ++;   
+      }
     }
   }
 
@@ -797,19 +828,16 @@ double DisparityExtractor::triangulate(cv::Mat & output)
   for(int i=0; i < cam0pnts.cols; i++)
   {
 
-    //TODO: find he average value of disparity around the selected point
-
     cv::Vec2d p = cam0pnts.at<cv::Vec2d>(0,i);
-    cv::Point3d p3 = getPointFromDisp(p[0],p[1],cvRound(avgDisp(disp,cvRound(p[0]),cvRound(p[1]))));
+    cv::Point3d p3 = getPointFromDisp(p[0],p[1],-avgDisp(disp,cvRound(p[0]),cvRound(p[1]),10));
 
     output.at<cv::Point3d>(0,i) = p3;
   }
 
-
-  return 0.0;
+  return getRMS(cam0pnts, output);
 }
 
-void DisparityExtractor::verify(const cv::Mat & pnts, bool* keep_on)
+void DisparityExtractor::verifyD(const cv::Mat & pnts, bool* keep_on)
 {
   
   cv::Mat disp;
@@ -842,19 +870,54 @@ void DisparityExtractor::verify(const cv::Mat & pnts, bool* keep_on)
   }
 }
 
-double DisparityExtractor::go(const cv::Mat & image, const bool ver, cv::Mat & points3D, bool* keep_on)
+void DisparityExtractor::verify(const cv::Mat & pnts, bool* keep_on)
 { 
 
-  extract(image);
+  cv::Mat disp;
+  disparity_.download(disp);  
 
-  process();
- 
-  double error = triangulate(points3D);
-
-  if(ver)
+  if(pnts.empty())
   {
-    verify(points3D, keep_on);
+    return;
+  }
+  
+  std::cout << "points to be projected " << std::endl;
+  std::cout << pnts << std::endl;
+  std::cout << "intrinsics " << std::endl;
+  std::cout << cam_.intrinsics_left_ << std::endl;
+
+  std::vector<cv::Point2d> points2D(pnts.cols);
+
+  cv::projectPoints(pnts,cv::Mat::eye(3,3,CV_64FC1),cv::Vec3d(0,0,0),cam_.intrinsics_left_,cam_.dist_left_,points2D);
+
+  int inside = 0;
+
+  for (unsigned int i = 0; i < pnts.cols; i++)
+  {
+
+    if(points2D[i].x < cam_.width_ && points2D[i].y < cam_.height_&& points2D[i].x > 0 && points2D[i].y > 0)
+    {
+      inside ++;
+    }
+  } 
+  //TODO: write circles in projected points
+  cv::Mat verification = disp.clone();
+  for (auto & c : points2D)
+  {
+    cv::circle(verification,c,4,255,2);
   }
 
-  return 0.0;
+
+  cv::namedWindow("Verification", CV_WINDOW_AUTOSIZE);
+  cv::imshow("Verification", verification);
+  
+  int k = cvWaitKey(2);
+  if (k == 27)
+  {
+      *keep_on = false;
+  }
+  if (k == 's')
+  {
+    cv:imwrite("../data/3Dpoints.jpg", verification);
+  }
 }
