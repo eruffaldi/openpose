@@ -143,3 +143,86 @@ void emitCSV(std::ofstream & outputfile, std::string & kp_str, const op::Array<f
      outputfile << '\n';
    }  
 }
+
+void filterVisible(const cv::Mat & pntsL, cv::Mat & nzL)
+{
+  cv::Vec2d pl;
+  cv::Vec2d zerov(0.0,0.0);
+
+  std::vector<cv::Vec2d> pntsl;
+
+  for (int i = 0; i < pntsL.cols; i++)
+  {
+    pl = pntsL.at<cv::Vec2d>(0,i);
+
+    if (pl != zerov)
+    {
+      pntsl.push_back(pl);
+    }
+
+  }
+
+  nzL = cv::Mat(1,pntsl.size(),CV_64FC2);
+
+  for (int i = 0; i < pntsl.size(); i++)
+  {
+    nzL.at<cv::Vec2d>(0,i) = pntsl[i];
+  }
+}
+
+void filterVisible(const cv::Mat & pntsL, const cv::Mat & pntsR, cv::Mat & nzL, cv::Mat & nzR)
+{ 
+  cv::Vec2d pl;
+  cv::Vec2d pr;
+  cv::Vec2d zerov(0.0,0.0);
+
+  std::vector<cv::Vec2d> pntsl;
+  std::vector<cv::Vec2d> pntsr;
+
+  for (int i = 0; i < pntsL.cols; i++)
+  {
+    pl = pntsL.at<cv::Vec2d>(0,i);
+    pr = pntsR.at<cv::Vec2d>(0,i);
+
+
+    if (pl != zerov && pr != zerov)
+    {
+      pntsl.push_back(pl);
+      pntsr.push_back(pr);
+    }
+
+  }
+
+  nzL = cv::Mat(1,pntsl.size(),CV_64FC2);
+  nzR = cv::Mat(1,pntsr.size(),CV_64FC2);
+
+  for (int i = 0; i < pntsl.size(); i++)
+  {
+    nzL.at<cv::Vec2d>(0,i) = pntsl[i];
+    nzR.at<cv::Vec2d>(0,i) = pntsr[i];
+  }
+}
+
+
+std::string type2str(int type) {
+  std::string r;
+
+  uchar depth = type & CV_MAT_DEPTH_MASK;
+  uchar chans = 1 + (type >> CV_CN_SHIFT);
+
+  switch ( depth ) {
+    case CV_8U:  r = "8U"; break;
+    case CV_8S:  r = "8S"; break;
+    case CV_16U: r = "16U"; break;
+    case CV_16S: r = "16S"; break;
+    case CV_32S: r = "32S"; break;
+    case CV_32F: r = "32F"; break;
+    case CV_64F: r = "64F"; break;
+    default:     r = "User"; break;
+  }
+
+  r += "C";
+  r += (chans+'0');
+
+  return r;
+}

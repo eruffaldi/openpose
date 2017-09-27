@@ -40,3 +40,10 @@ void opArray2Mat(const op::Array<float> & keypoints, cv::Mat & campnts);
 std::vector<std::string> CSVTokenize(std::string kpl_str);
 
 void emitCSV(std::ofstream & outputfile, std::string & kp_str, const op::Array<float> & poseKeypoints, int camera, int cur_frame);
+
+void filterVisible(const cv::Mat & pntsL, cv::Mat & nzL);
+
+void filterVisible(const cv::Mat & pntsL, const cv::Mat & pntsR, cv::Mat & nzL, cv::Mat & nzR);
+
+std::string type2str(int type);
+

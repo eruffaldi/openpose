@@ -23,8 +23,8 @@ if (CUDA_FOUND)
     add_definitions(-DUSE_CAFFE)
     add_definitions(-DUSE_CUDNN)
 
-    ADD_EXECUTABLE( stereopose_rt examples/online.cpp src/stereoprocess.cpp src/utilities.cpp src/stereo_cam.cpp)
-    ADD_EXECUTABLE( stereopose_of examples/offline.cpp src/stereoprocess.cpp src/utilities.cpp src/stereo_cam.cpp)
+    ADD_EXECUTABLE( stereopose_rt examples/online.cpp src/stereoprocess.cpp src/utilities.cpp src/stereo_cam.cpp src/disparity_extractor.cpp)
+    ADD_EXECUTABLE( stereopose_of examples/offline.cpp src/stereoprocess.cpp src/utilities.cpp src/stereo_cam.cpp src/disparity_extractor.cpp)
 
     TARGET_LINK_LIBRARIES(stereopose_rt
         ${CUDA_LIBS}
