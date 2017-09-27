@@ -149,7 +149,6 @@ struct DisparityExtractor : StereoPoseExtractor {
 	cv::Rect roi1_, roi2_;
 	cv::Mat map11_, map12_, map21_, map22_;
 
-
 	cv::Ptr<cv::cuda::StereoBM> disparter_ = cv::cuda::createStereoBM();
 
 };

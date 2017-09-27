@@ -198,14 +198,14 @@ void DisparityExtractor::extract(const cv::Mat & image)
 
   cv::Mat left_undist, right_undist;
 
-  //cv::remap(imageleft_, left_undist, map11_, map12_, cv::INTER_LINEAR);
-  //cv::remap(imageright_, right_undist, map21_, map22_, cv::INTER_LINEAR);
+  cv::remap(imageleft_, left_undist, map11_, map12_, cv::INTER_LINEAR);
+  cv::remap(imageright_, right_undist, map21_, map22_, cv::INTER_LINEAR);
 
   //cv::undistort(imageleft_, left_undist, cam_.intrinsics_left_, cam_.dist_left_);
   //cv::undistort(imageright_, right_undist, cam_.intrinsics_right_, cam_.dist_right_);
 
-  //imageleft_ = left_undist;
-  //imageright_ = right_undist;
+  imageleft_ = left_undist;
+  imageright_ = right_undist;
 
   //cv::pyrDown(imageleft_, imageleft_);
   //cv::pyrDown(imageright_, imageright_);
@@ -217,7 +217,11 @@ void DisparityExtractor::visualize(bool * keep_on)
   cv::Mat disp,disp8;
   cv::Mat cam0pnts,cam1pnts;
 
+  cv::Mat pnts_left,pnts_right;
+
   disparity_.download(disp); 
+
+  void StereoPoseExtractor::getPoints(pnts_left, pnts_right);
 
   //std::cout << "disparity " << std::endl;
   //std::cout << disp << std::endl;
