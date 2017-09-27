@@ -45,14 +45,14 @@ cv::Point3d DisparityExtractor::getPointFromDisp(double u, double v, double d)
 cv::Point3d DisparityExtractor::getPointFromDisp(double u, double v, double d)
 {
 
-  std::cout << "Reconstructing 3D point from " << u << " " << v << " " << d << std::endl;
+  double f = cam_.intrinsics_left_.at<double>(0,0);
+  double b = -cam_.ST_[0];
 
-  cv::Mat point2DD(1,1,CV_64FC3);
-  cv::Mat point3D(1,1,CV_64FC3);
+  double Z = (f * b)/d;
+  double X = (u * Z)/f;
+  double Y = (v * Z)/f;
 
-  cv::perspectiveTransform(point2DD, point3D, Q_);
-
-  return point3D.at<cv::Point3d>(0,0);
+  return cv::Point3d(X,Y,Z);
 
 }
 
@@ -78,10 +78,10 @@ double DisparityExtractor::avgDisp(const cv::Mat & disp, int u, int v, int side)
     { 
 
       ret = ret + (double)disp.at<uint8_t>(i,j);
-      if((double)disp.at<uint8_t>(i,j) > 0.0)
-      {
+     if((double)disp.at<uint8_t>(i,j) > 0.0)
+     {
         count ++;   
-      }
+     }
     }
   }
 
@@ -106,12 +106,13 @@ double DisparityExtractor::triangulate(cv::Mat & output)
   {
 
     cv::Vec2d p = cam0pnts.at<cv::Vec2d>(0,i);
-    cv::Point3d p3 = getPointFromDisp(p[0],p[1],(double)disp.at<uint8_t>(cvRound(p[0]),cvRound(p[1])));
-    //std::cout << "p3: " << p3 << std::endl;
+    double dispatpoint = (double)disp.at<uint8_t>(cvRound(p[0]),cvRound(p[1]));
+    double disparity_point = avgDisp(disp,cvRound(p[0]),cvRound(p[1]),3);
+    cv::Point3d p3 = getPointFromDisp(p[0],p[1],dispatpoint);
     output.at<cv::Point3d>(0,i) = p3;
   }
 
-  std::cout << output << std::endl;
+  std::cout << "point: " << output.at<cv::Point3d>(0,0) << std::endl;
 
   return getRMS(cam0pnts, output);
 }
@@ -197,12 +198,40 @@ void DisparityExtractor::extract(const cv::Mat & image)
 
   cv::Mat left_undist, right_undist;
 
-  cv::undistort(imageleft_, left_undist, cam_.intrinsics_left_, cam_.dist_left_);
-  cv::undistort(imageright_, right_undist, cam_.intrinsics_right_, cam_.dist_right_);
+  //cv::remap(imageleft_, left_undist, map11_, map12_, cv::INTER_LINEAR);
+  //cv::remap(imageright_, right_undist, map21_, map22_, cv::INTER_LINEAR);
 
-  imageleft_ = left_undist;
-  imageright_ = right_undist;
+  //cv::undistort(imageleft_, left_undist, cam_.intrinsics_left_, cam_.dist_left_);
+  //cv::undistort(imageright_, right_undist, cam_.intrinsics_right_, cam_.dist_right_);
+
+  //imageleft_ = left_undist;
+  //imageright_ = right_undist;
 
   //cv::pyrDown(imageleft_, imageleft_);
   //cv::pyrDown(imageright_, imageright_);
+}
+
+void DisparityExtractor::visualize(bool * keep_on)
+{ 
+
+  cv::Mat disp,disp8;
+  cv::Mat cam0pnts,cam1pnts;
+
+  disparity_.download(disp); 
+
+  //std::cout << "disparity " << std::endl;
+  //std::cout << disp << std::endl;
+
+  //cv::hconcat(outputImageL_, outputImageR_, sidebyside_out);
+  if(!disp.empty())
+  {
+    cv::namedWindow("Side By Side", CV_WINDOW_AUTOSIZE);
+    cv::imshow("Side By Side", disp);
+  }
+
+  int k = cvWaitKey(2);
+  if (k == 27)
+  {
+      *keep_on = false;
+  }
 }

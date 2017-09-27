@@ -102,6 +102,17 @@ struct DisparityExtractor : StereoPoseExtractor {
 		P_ = K4 * RT;
 		iP_ = P_.inv();
 
+	    cv::Mat R1,R2,P1,P2;
+	    cv::Size img_size = cv::Size(cam_.width_,cam_.height_);
+	   
+	    cv::stereoRectify(cam_.intrinsics_left_,cam_.dist_left_,cam_.intrinsics_right_,cam_.dist_right_,img_size, cam_.SR_, cam_.ST_,
+	                      R1,R2,P1,P2,Q_, cv::CALIB_ZERO_DISPARITY, -1,img_size ,&roi1_, &roi2_);
+
+	    initUndistortRectifyMap(cam_.intrinsics_left_, cam_.dist_left_ , R1, P1, img_size, CV_16SC2, map11_, map12_);
+	    initUndistortRectifyMap(cam_.intrinsics_right_, cam_.dist_right_, R2, P2, img_size, CV_16SC2, map21_, map22_);
+
+	    /*disparter_->setROI1(roi1_);
+	    disparter_->setROI2(roi2_);
 	    disparter_->setPreFilterCap(31);
 	    disparter_->setBlockSize(9);
 	    disparter_->setMinDisparity(0);
@@ -109,12 +120,7 @@ struct DisparityExtractor : StereoPoseExtractor {
 	    disparter_->setUniquenessRatio(15);
 	    disparter_->setSpeckleWindowSize(100);
 	    disparter_->setSpeckleRange(32);
-	    disparter_->setDisp12MaxDiff(1);
-
-	    cv::Mat R1,R2,P1,P2;
-
-	    cv::stereoRectify(cam_.intrinsics_left_,cam_.dist_left_,cam_.intrinsics_right_,cam_.dist_right_,cv::Size(cam_.width_,cam_.height_),cam_.SR_, cam_.ST_,
-	                      R1,R2,P1,P2,Q_);
+	    disparter_->setDisp12MaxDiff(1);*/
 
 	}
 
@@ -132,14 +138,19 @@ struct DisparityExtractor : StereoPoseExtractor {
 
 	virtual double triangulate(cv::Mat & output); 
 
+	virtual void visualize(bool * keep_on);
+
 	cv::cuda::GpuMat disparity_;
 	cv::cuda::GpuMat gpuleft_,gpuright_;
 
 	cv::Mat P_;
 	cv::Mat iP_;
 	cv::Mat Q_;
+	cv::Rect roi1_, roi2_;
+	cv::Mat map11_, map12_, map21_, map22_;
 
-	cv::Ptr<cv::cuda::StereoBM> disparter_ = cv::cuda::createStereoBM(16,9);
+
+	cv::Ptr<cv::cuda::StereoBM> disparter_ = cv::cuda::createStereoBM();
 
 };
 
