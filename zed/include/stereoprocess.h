@@ -56,7 +56,7 @@ struct StereoPoseExtractor {
 
 	virtual void verify(const cv::Mat & pnts, bool* keep_on);
 
-	virtual double getRMS(const cv::Mat &, const cv::Mat & pnts3D);
+	virtual double getRMS(const cv::Mat & cam0pnts, const cv::Mat & pnts3D, bool left = true);
 
 	virtual double go(const cv::Mat & image, const bool verify, cv::Mat &, bool* keep_on);
 

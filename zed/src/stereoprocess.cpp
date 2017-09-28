@@ -529,7 +529,7 @@ void StereoPoseExtractor::verify(const cv::Mat & pnts, bool* keep_on)
   }
 }
 
-double StereoPoseExtractor::getRMS(const cv::Mat & cam0pnts, const cv::Mat & pnts3D)
+double StereoPoseExtractor::getRMS(const cv::Mat & cam0pnts, const cv::Mat & pnts3D, bool left)
 { 
 
   if(pnts3D.empty())
@@ -538,8 +538,16 @@ double StereoPoseExtractor::getRMS(const cv::Mat & cam0pnts, const cv::Mat & pnt
   }
 
   cv::Mat points2D; 
- 
-  cv::projectPoints(pnts3D,cv::Mat::eye(3,3,CV_64FC1),cv::Vec3d(0,0,0),cam_.intrinsics_left_,cam_.dist_left_,points2D);
+
+  if(left)
+  {
+    cv::projectPoints(pnts3D,cv::Mat::eye(3,3,CV_64FC1),cv::Vec3d(0,0,0),cam_.intrinsics_left_,cam_.dist_left_,points2D);
+  }
+  else
+  {
+    cv::projectPoints(pnts3D,cv::Mat::eye(3,3,CV_64FC1),cam_.ST_,cam_.intrinsics_right_,cam_.dist_right_,points2D);
+  }
+
 
   cv::transpose(points2D,points2D);
 

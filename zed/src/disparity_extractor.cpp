@@ -38,24 +38,15 @@ cv::Point3d DisparityExtractor::getPointFromDisp(double u, double v, double d)
 double DisparityExtractor::avgDisp(const cv::Mat & disp, int u, int v, int side)
 {
 
-  double wlb,wub;
-  double hlb,hub;
+  double wlb,hlb;
 
   wlb = std::max(0,u - side);
   hlb = std::max(0,v - side);
 
-  wub = std::min(cam_.width_, u + side + 1);
-  hub = std::min(cam_.height_,v + side + 1);
-
   cv::Mat matrix(disp(cv::Rect(wlb,hlb,side,side)));
-
-  std::cout << "Current Rect " << std::endl;
-  std::cout << disp(cv::Rect(wlb,hlb,side,side)) << std::endl;
 
   double sum = cv::sum(matrix)[0];
   int nonzero = cv::countNonZero(matrix); 
-
-  std::cout << "Returning average " << sum/(double)nonzero << std::endl; 
 
   return sum / (double)nonzero;
 }
@@ -76,14 +67,8 @@ double DisparityExtractor::maxDisp(const cv::Mat & disp, int u, int v, int side)
 
   cv::Mat matrix(disp(cv::Rect(wlb,hlb,side,side)));
 
-  std::cout << "Current Rect " << std::endl;
-  std::cout << disp(cv::Rect(wlb,hlb,side,side)) << std::endl;
-
-
   cv::minMaxLoc(matrix,&min,&max);
 
-
-  std::cout << "Returning maxval " << max << std::endl;
   return max;
 }
 
@@ -111,14 +96,18 @@ double DisparityExtractor::triangulate(cv::Mat & output)
 
     cv::Vec2d p = cam0pnts.at<cv::Vec2d>(0,i);
     double dispatpoint = (double)disp.at<uint16_t>(cvRound(p[0]),cvRound(p[1]));
-    double disparity_point = avgDisp(disp,cvRound(p[0]),cvRound(p[1]),3);
+    double disparity_point = maxDisp(disp,cvRound(p[0]),cvRound(p[1]),5);
     std::cout << "Disparity " << disparity_point << std::endl;
     cv::Point3d p3 = getPointFromDisp(p[0],p[1],disparity_point);
     std::cout << "Point " << p3 << std::endl;
     output.at<cv::Point3d>(0,i) = p3;
   }
 
-  return 0.0;
+
+  //TODO: get the error (project the point3D in camera right)
+
+  std::cout << "Error: " << getRMS(cam0pnts, output, false) << std::endl;
+  return getRMS(cam0pnts,output, false);
 }
 
 
@@ -147,31 +136,20 @@ void DisparityExtractor::verify(const cv::Mat & pnts, bool* keep_on)
     return;
   }
   
+  std::cout << "points to be projected " << std::endl;
+  std::cout << pnts << std::endl;
+  std::cout << "intrinsics " << std::endl;
+  std::cout << cam_.intrinsics_left_ << std::endl;
+
   std::vector<cv::Point2d> points2D(pnts.cols);
-  std::vector<cv::Vec4d> point2DD(pnts.cols);
 
-  std::cout << "Projecting points:\n " << pnts << std::endl;
+  cv::projectPoints(pnts,cv::Mat::eye(3,3,CV_64FC1),cv::Vec3d(0,0,0),cam_.intrinsics_left_,cam_.dist_right_,points2D);
 
-  for (unsigned int i = 0; i < pnts.cols; i++)
-  {
-
-    cv::Vec3d curpoint = pnts.at<cv::Vec3d>(0,i);
-    cv::Mat hom3D = (cv::Mat_<double>(4,1) << curpoint[0], curpoint[1], curpoint[2], 1.0);
-
-    cv::Mat hom2DD = P_ * hom3D;
-
-    double W = hom2DD.at<double>(0,3);
-
-
-    cv::Point2d point2D(hom2DD.at<double>(0,0)/W, hom2DD.at<double>(0,1)/W);
-    points2D[i] = point2D;
-   
-  } 
   //TODO: write circles in projected points
-  cv::Mat verification = imageright_.clone();
+  cv::Mat verification = imageleft_.clone();
   for (auto & c : points2D)
   {
-    cv::circle(verification,c,4,255,2);
+    cv::circle(verification,c,4,cv::Scalar(0,0,255),2);
   }
 
 
@@ -184,16 +162,10 @@ void DisparityExtractor::verify(const cv::Mat & pnts, bool* keep_on)
       *keep_on = false;
   }
   if (k == 's')
-  {  
-    cv::Mat disp;
-    disparity_.download(disp);  
-    std::cout << "storing the cloud " << std::endl;
-    cv::Mat xyz;
-    cv::reprojectImageTo3D(disp, xyz, Q_, true);
-    saveXYZ("../data/3Dpoints.pcd", xyz);
+  {
+    cv:imwrite("../data/3Dpoints.jpg", verification);
   }
 }
-
 void DisparityExtractor::extract(const cv::Mat & image)
 {
 
@@ -240,7 +212,7 @@ void DisparityExtractor::visualize(bool * keep_on)
     //cv::imshow("Left Camera", imageleft_);
   }
 
-  int k = cvWaitKey(0);
+  int k = cvWaitKey(1);
   if (k == 27)
   {
       *keep_on = false;
