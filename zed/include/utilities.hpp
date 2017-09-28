@@ -47,3 +47,5 @@ void filterVisible(const cv::Mat & pntsL, const cv::Mat & pntsR, cv::Mat & nzL, 
 
 std::string type2str(int type);
 
+void drawPoints(const cv::Mat & points, cv::Mat & image);
+

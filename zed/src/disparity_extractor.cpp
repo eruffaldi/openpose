@@ -11,31 +11,10 @@ void DisparityExtractor::getDisparity()
   gpuleft_.upload(grayleft);
   gpuright_.upload(grayright);
 
+
   disparter_->compute(gpuleft_,gpuright_,disparity_);
+  //disparter_s_->compute(gpuleft_,gpuright_,disparity_);
 }
-
-/*
-* x: point coordinate in pixel
-* y: point coordinate in pixel
-* d: disparity at point (x,y)
-*/
-/*
-cv::Point3d DisparityExtractor::getPointFromDisp(double u, double v, double d)
-{
-
-
-  std::cout << "Reconstructing 3D point from " << u << " " << v << " " << d << std::endl;
-
-  cv::Mat hom_point3D(4,1,CV_64FC1);
-  cv::Mat hom_point2DD = (cv::Mat_<double>(4,1) << u, v, d, 1.0);
-
-  hom_point3D = iP_ * hom_point2DD;
-
-  double W = hom_point3D.at<double>(3,0);
-
-  return cv::Point3d(hom_point3D.at<double>(0,0)/W,hom_point3D.at<double>(1,0)/W,hom_point3D.at<double>(2,0)/W);
-}
-*/
 
 /*
 * x: point coordinate in pixel
@@ -59,7 +38,6 @@ cv::Point3d DisparityExtractor::getPointFromDisp(double u, double v, double d)
 double DisparityExtractor::avgDisp(const cv::Mat & disp, int u, int v, int side)
 {
 
-  //TODO:check is not a border point
   double wlb,wub;
   double hlb,hub;
 
@@ -69,23 +47,44 @@ double DisparityExtractor::avgDisp(const cv::Mat & disp, int u, int v, int side)
   wub = std::min(cam_.width_, u + side + 1);
   hub = std::min(cam_.height_,v + side + 1);
 
-  double count = 0.0;
-  double ret = 0.0;
+  cv::Mat matrix(disp(cv::Rect(wlb,hlb,side,side)));
 
-  for (int i = wlb; i < wub; i++)
-  {
-    for (int j = hlb; j < hub; j++)
-    { 
+  std::cout << "Current Rect " << std::endl;
+  std::cout << disp(cv::Rect(wlb,hlb,side,side)) << std::endl;
 
-      ret = ret + (double)disp.at<uint8_t>(i,j);
-     if((double)disp.at<uint8_t>(i,j) > 0.0)
-     {
-        count ++;   
-     }
-    }
-  }
+  double sum = cv::sum(matrix)[0];
+  int nonzero = cv::countNonZero(matrix); 
 
-  return ret/count;
+  std::cout << "Returning average " << sum/(double)nonzero << std::endl; 
+
+  return sum / (double)nonzero;
+}
+
+double DisparityExtractor::maxDisp(const cv::Mat & disp, int u, int v, int side)
+{ 
+
+  double min,max,min_loc,max_loc = 0;
+
+  double wlb,wub;
+  double hlb,hub;
+
+  wlb = std::max(0,u - side);
+  hlb = std::max(0,v - side);
+
+  wub = std::min(cam_.width_, u + side + 1);
+  hub = std::min(cam_.height_,v + side + 1);
+
+  cv::Mat matrix(disp(cv::Rect(wlb,hlb,side,side)));
+
+  std::cout << "Current Rect " << std::endl;
+  std::cout << disp(cv::Rect(wlb,hlb,side,side)) << std::endl;
+
+
+  cv::minMaxLoc(matrix,&min,&max);
+
+
+  std::cout << "Returning maxval " << max << std::endl;
+  return max;
 }
 
 double DisparityExtractor::triangulate(cv::Mat & output) 
@@ -95,26 +94,31 @@ double DisparityExtractor::triangulate(cv::Mat & output)
 
   cv::Mat disp,disp8;
   cv::Mat cam0pnts,cam1pnts;
+  cv::Mat xyz;
 
   disparity_.download(disp);  
   getPoints(cam0pnts,cam1pnts);
   filterVisible(cam0pnts,cam1pnts,cam0pnts,cam1pnts);
 
+  disp.convertTo(disp8, CV_8U, 255/(disparter_->getNumDisparities()*16.));
+
   output = cv::Mat(1,cam0pnts.cols,CV_64FC3);
+
+  //TODO: be sure that depth measures are exact if disparity is taken 
 
   for(int i=0; i < cam0pnts.cols; i++)
   {
 
     cv::Vec2d p = cam0pnts.at<cv::Vec2d>(0,i);
-    double dispatpoint = (double)disp.at<uint8_t>(cvRound(p[0]),cvRound(p[1]));
+    double dispatpoint = (double)disp.at<uint16_t>(cvRound(p[0]),cvRound(p[1]));
     double disparity_point = avgDisp(disp,cvRound(p[0]),cvRound(p[1]),3);
-    cv::Point3d p3 = getPointFromDisp(p[0],p[1],dispatpoint);
+    std::cout << "Disparity " << disparity_point << std::endl;
+    cv::Point3d p3 = getPointFromDisp(p[0],p[1],disparity_point);
+    std::cout << "Point " << p3 << std::endl;
     output.at<cv::Point3d>(0,i) = p3;
   }
 
-  std::cout << "point: " << output.at<cv::Point3d>(0,0) << std::endl;
-
-  return getRMS(cam0pnts, output);
+  return 0.0;
 }
 
 
@@ -198,11 +202,11 @@ void DisparityExtractor::extract(const cv::Mat & image)
 
   cv::Mat left_undist, right_undist;
 
-  cv::remap(imageleft_, left_undist, map11_, map12_, cv::INTER_LINEAR);
-  cv::remap(imageright_, right_undist, map21_, map22_, cv::INTER_LINEAR);
+  //cv::remap(imageleft_, left_undist, map11_, map12_, cv::INTER_LINEAR);
+  //cv::remap(imageright_, right_undist, map21_, map22_, cv::INTER_LINEAR);
 
-  //cv::undistort(imageleft_, left_undist, cam_.intrinsics_left_, cam_.dist_left_);
-  //cv::undistort(imageright_, right_undist, cam_.intrinsics_right_, cam_.dist_right_);
+  cv::undistort(imageleft_, left_undist, cam_.intrinsics_left_, cam_.dist_left_);
+  cv::undistort(imageright_, right_undist, cam_.intrinsics_right_, cam_.dist_right_);
 
   imageleft_ = left_undist;
   imageright_ = right_undist;
@@ -221,19 +225,22 @@ void DisparityExtractor::visualize(bool * keep_on)
 
   disparity_.download(disp); 
 
-  void StereoPoseExtractor::getPoints(pnts_left, pnts_right);
+  //disp.convertTo(disp8, CV_8U, 255/(disparter_->getNumDisparities()*16.));
 
-  //std::cout << "disparity " << std::endl;
-  //std::cout << disp << std::endl;
+  getPoints(pnts_left, pnts_right);
 
-  //cv::hconcat(outputImageL_, outputImageR_, sidebyside_out);
+  //TODO: verify that the disparity is centered in the left camera
+  drawPoints(pnts_left, disp);
+
   if(!disp.empty())
   {
-    cv::namedWindow("Side By Side", CV_WINDOW_AUTOSIZE);
-    cv::imshow("Side By Side", disp);
+    cv::namedWindow("Disparity", CV_WINDOW_AUTOSIZE);
+    //cv::namedWindow("Left Camera", CV_WINDOW_AUTOSIZE);
+    cv::imshow("Disparity", (cv::Mat_<uchar>)disp);
+    //cv::imshow("Left Camera", imageleft_);
   }
 
-  int k = cvWaitKey(2);
+  int k = cvWaitKey(0);
   if (k == 27)
   {
       *keep_on = false;

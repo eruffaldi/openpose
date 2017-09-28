@@ -20,6 +20,7 @@
 #include <openpose/utilities/headers.hpp>
 #include "utilities.hpp"
 #include "stereo_cam.h"
+#include <opencv2/cudastereo.hpp>
 #include <gflags/gflags.h> // DEFINE_bool, DEFINE_int32, DEFINE_int64, DEFINE_uint64, DEFINE_double, DEFINE_string
 #include <glog/logging.h> // google::InitGoogleLogging
 
@@ -104,9 +105,12 @@ struct DisparityExtractor : StereoPoseExtractor {
 
 	    cv::Mat R1,R2,P1,P2;
 	    cv::Size img_size = cv::Size(cam_.width_,cam_.height_);
-	   
+
 	    cv::stereoRectify(cam_.intrinsics_left_,cam_.dist_left_,cam_.intrinsics_right_,cam_.dist_right_,img_size, cam_.SR_, cam_.ST_,
 	                      R1,R2,P1,P2,Q_, cv::CALIB_ZERO_DISPARITY, -1,img_size ,&roi1_, &roi2_);
+
+		/*	   
+		* No need for rectification because of (almost) perfect horizontal stereo
 
 	    initUndistortRectifyMap(cam_.intrinsics_left_, cam_.dist_left_ , R1, P1, img_size, CV_16SC2, map11_, map12_);
 	    initUndistortRectifyMap(cam_.intrinsics_right_, cam_.dist_right_, R2, P2, img_size, CV_16SC2, map21_, map22_);
@@ -120,13 +124,17 @@ struct DisparityExtractor : StereoPoseExtractor {
 	    disparter_->setUniquenessRatio(15);
 	    disparter_->setSpeckleWindowSize(100);
 	    disparter_->setSpeckleRange(32);
-	    disparter_->setDisp12MaxDiff(1);*/
+	  	disparter_->setDisp12MaxDiff(1);*/
+
+	  	//disparity_ = cv::cuda::GpuMat(1280,720,CV_8U);
 
 	}
 
 	void getDisparity();
 
 	cv::Point3d getPointFromDisp(double u, double v, double d);
+
+	double maxDisp(const cv::Mat & disp, int u, int v, int side);
 
 	double avgDisp(const cv::Mat & disp, int u, int v, int side = 5);
 
@@ -140,6 +148,7 @@ struct DisparityExtractor : StereoPoseExtractor {
 
 	virtual void visualize(bool * keep_on);
 
+
 	cv::cuda::GpuMat disparity_;
 	cv::cuda::GpuMat gpuleft_,gpuright_;
 
@@ -149,7 +158,12 @@ struct DisparityExtractor : StereoPoseExtractor {
 	cv::Rect roi1_, roi2_;
 	cv::Mat map11_, map12_, map21_, map22_;
 
-	cv::Ptr<cv::cuda::StereoBM> disparter_ = cv::cuda::createStereoBM();
+	cv::Ptr<cv::cuda::StereoBM> disparter_ = cv::cuda::createStereoBM(128,3);
+
+	int ndisp,iters,levels = 0;
+
+	//cv::cuda::StereoBeliefPropagation::estimateRecommendedParams(1280,720,&ndisp,&iters,&levels);
+	cv::Ptr<cv::cuda::StereoBeliefPropagation> disparter_s_ = cv::cuda::createStereoBeliefPropagation();
 
 };
 
