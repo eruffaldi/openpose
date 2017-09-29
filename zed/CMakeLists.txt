@@ -23,10 +23,11 @@ if (CUDA_FOUND)
     add_definitions(-DUSE_CAFFE)
     add_definitions(-DUSE_CUDNN)
 
-    ADD_EXECUTABLE( stereopose_rt examples/online.cpp src/stereoprocess.cpp src/utilities.cpp src/stereo_cam.cpp src/disparity_extractor.cpp)
-    ADD_EXECUTABLE( stereopose_of examples/offline.cpp src/stereoprocess.cpp src/utilities.cpp src/stereo_cam.cpp src/disparity_extractor.cpp)
+    file(GLOB STEREO_SOURCES src/*.cpp)
 
-    TARGET_LINK_LIBRARIES(stereopose_rt
+    ADD_LIBRARY( stereoutils SHARED ${STEREO_SOURCES} )
+
+    TARGET_LINK_LIBRARIES( stereoutils
         ${CUDA_LIBS}
         ${libuvc_LIBRARIES} 
         ${OpenCV_LIBS}
@@ -37,14 +38,21 @@ if (CUDA_FOUND)
         openpose
     )
 
+    #install library 
+    install( TARGETS stereoutils DESTINATION lib/stereoutils)
+
+    #install library headers
+    file( GLOB HEADERS inlude/*.h include/*.hpp)
+    install( FILES ${HEADERS} DESTINATION include/stereoutils )
+
+    ADD_EXECUTABLE( stereopose_rt examples/online.cpp )
+    ADD_EXECUTABLE( stereopose_of examples/offline.cpp )
+
+    TARGET_LINK_LIBRARIES(stereopose_rt
+        stereoutils
+    )
+
     TARGET_LINK_LIBRARIES(stereopose_of
-        ${CUDA_LIBS}
-        ${libuvc_LIBRARIES} 
-        ${OpenCV_LIBS}
-        ${Boost_LIBRARIES}
-        ${CAFFE_DIR}/build/lib/libcaffe.so
-        glog
-        gflags
-        openpose
+        stereoutils
     )
 endif ()
