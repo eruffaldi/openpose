@@ -381,8 +381,11 @@ void StereoPoseExtractor::extract(const cv::Mat & image)
 
 }
 
+//TODO: save time by using OpenPose in a single image? 
 void StereoPoseExtractor::process()
 {
+
+  //cv::Mat global_image = hconcat(imageleft_,imageright_);
 
   op::Array<float> netInputArrayL;
   op::Array<float> netInputArrayR;
